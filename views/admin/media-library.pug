@@ -1,0 +1,53 @@
+extends layout
+
+block content
+    .header
+        h1 Media Library
+        p Manage your uploaded images and videos
+
+    .card
+        .card-header
+            h2.card-title Media Files
+        .card-body
+            if mediaFiles.length > 0
+                .preview-grid
+                    each file in mediaFiles
+                        .preview-item
+                            if file.mime_type.startsWith('image/')
+                                img(src=file.url, alt=file.original_name)
+                            else
+                                video(src=file.url, controls)
+                            .preview-overlay
+                                p= file.original_name
+                                small= (file.file_size / 1024).toFixed(2) + ' KB'
+                                .action-buttons(style='margin-top: 8px')
+                                    button.btn.btn-sm.btn-danger(type='button', onclick='deleteMedia(' + file.id + ')') Delete
+            else
+                .empty-state
+                    .empty-state-icon 🖼️
+                    .empty-state-title No media files
+                    .empty-state-description
+                        | Upload images or videos when creating posts.
+                        a.btn.btn-primary(href='/admin/create' style='margin-left: 10px') Create Post
+
+block scripts
+    script.
+        async function deleteMedia(fileId) {
+            if (!confirm('Are you sure you want to delete this file?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/admin/media/' + fileId, {
+                    method: 'DELETE',
+                });
+
+                if (response.ok) {
+                    window.location.reload();
+                } else {
+                    alert('Failed to delete file');
+                }
+            } catch (error) {
+                alert('Error deleting file: ' + error.message);
+            }
+        }

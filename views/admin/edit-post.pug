@@ -1,0 +1,205 @@
+extends layout
+
+block content
+    .header
+        h1 Edit Post
+        p Modify your scheduled post
+
+    .card
+        .card-body
+            form#editForm(method='POST', action='/admin/scheduled/' + post.id + '?_method=PUT', enctype='multipart/form-data')
+                .form-group
+                    label.form-label(for='text') Post Text
+                    textarea.form-control#text(name='text', rows='5')= post.text || ''
+
+                .form-group
+                    label.form-label Current Attachments
+                    if post.attachment_data
+                        .preview-grid
+                            each url, index in post.attachment_data.attachmentUrl
+                                .preview-item
+                                    if post.attachment_data.attachmentType[index] === 'Image'
+                                        img(src=url)
+                                    else
+                                        video(src=url, controls)
+                    .file-upload#fileUpload
+                        .file-upload-icon 📎
+                        p Click to add more images or videos
+                        input(type='file', id='fileInput', accept='image/*,video/*', multiple, onchange='handleFileUpload(event)')
+
+                    #previewContainer.preview-grid
+                    #attachmentData
+
+                .form-group
+                    label.form-label(for='scheduleDate') Schedule
+                    - const scheduledDate = post.scheduled_for ? new Date(post.scheduled_for * 1000) : new Date()
+                    .row
+                        .col
+                            input.form-control#scheduleDate(type='date', name='scheduleDate', value=scheduledDate.toISOString().split('T')[0])
+                        .col
+                            input.form-control#scheduleTime(type='time', name='scheduleTime', value=scheduledDate.toTimeString().substring(0, 5))
+
+                .form-group
+                    label.form-label(for='replyControl') Reply Control
+                    select.form-control#replyControl(name='replyControl')
+                        option(value='', selected=!post.reply_control) Everyone can reply
+                        option(value='mentioned_only', selected=post.reply_control === 'mentioned_only') Only mentioned can reply
+                        option(value='followers_only', selected=post.reply_control === 'followers_only') Only followers can reply
+
+                .form-group
+                    label.form-label(for='topicTag') Topic Tag
+                    input.form-control#topicTag(type='text', name='topicTag', value=post.topic_tag || '', placeholder='e.g., travel, food, tech')
+
+                .form-group
+                    label.form-label(for='linkAttachment') Link Attachment
+                    input.form-control#linkAttachment(type='url', name='linkAttachment', value=post.link_attachment || '', placeholder='https://example.com')
+
+                .form-group
+                    .form-check
+                        input.form-check-input#spoilerMedia(type='checkbox', name='spoilerMedia', checked=post.is_spoiler_media)
+                        label.form-check-label(for='spoilerMedia') Mark as spoiler
+
+                .action-buttons
+                    a.btn.btn-secondary(href='/admin/scheduled') Cancel
+                    button.btn.btn-primary(type='submit') Update Post
+
+block scripts
+    script.
+        let uploadedFiles = [];
+
+        // Toast notification function
+        function showToast(message, type = 'success') {
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.textContent = message;
+
+            document.body.appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.add('show');
+            }, 10);
+
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => {
+                    toast.remove();
+                }, 300);
+            }, 3000);
+        }
+
+        // Form submission handler
+        document.getElementById('editForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const formData = new FormData(e.target);
+
+            try {
+                const response = await fetch(e.target.action, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showToast(data.message || 'Post updated successfully!', 'success');
+                    setTimeout(() => {
+                        window.location.href = '/admin/scheduled';
+                    }, 1000);
+                } else {
+                    showToast(data.message || 'Failed to update post', 'error');
+                }
+            } catch (error) {
+                showToast('Error: ' + error.message, 'error');
+            }
+        });
+
+        async function handleFileUpload(event) {
+            const files = event.target.files;
+
+            for (const file of files) {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                try {
+                    const response = await fetch('/admin/upload/file', {
+                        method: 'POST',
+                        body: formData,
+                    });
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        uploadedFiles.push(data.file);
+                        displayPreview(data.file);
+                    }
+                } catch (error) {
+                    alert('Error uploading file: ' + error.message);
+                }
+            }
+        }
+
+        function displayPreview(file) {
+            const container = document.getElementById('previewContainer');
+            const preview = document.createElement('div');
+            preview.className = 'preview-item';
+            preview.dataset.fileId = file.id;
+
+            if (file.mime_type.startsWith('image/')) {
+                const img = document.createElement('img');
+                img.src = file.url;
+                preview.appendChild(img);
+            } else {
+                const video = document.createElement('video');
+                video.src = file.url;
+                video.controls = true;
+                preview.appendChild(video);
+            }
+
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'preview-remove';
+            removeBtn.innerHTML = '×';
+            removeBtn.onclick = () => removeFile(file.id);
+            preview.appendChild(removeBtn);
+
+            container.appendChild(preview);
+            updateAttachmentData();
+        }
+
+        function removeFile(fileId) {
+            uploadedFiles = uploadedFiles.filter(f => f.id !== fileId);
+            const preview = document.querySelector(`[data-file-id="${fileId}"]`);
+            if (preview) {
+                preview.remove();
+            }
+            updateAttachmentData();
+        }
+
+        function updateAttachmentData() {
+            const container = document.getElementById('attachmentData');
+            container.innerHTML = '';
+
+            uploadedFiles.forEach((file) => {
+                const typeInput = document.createElement('input');
+                typeInput.type = 'hidden';
+                typeInput.name = 'attachmentType';
+                typeInput.value = file.mime_type.startsWith('image/') ? 'Image' : 'Video';
+                container.appendChild(typeInput);
+
+                const urlInput = document.createElement('input');
+                urlInput.type = 'hidden';
+                urlInput.name = 'attachmentUrl';
+                urlInput.value = file.url;
+                container.appendChild(urlInput);
+
+                const altInput = document.createElement('input');
+                altInput.type = 'hidden';
+                altInput.name = 'attachmentAltText';
+                altInput.value = '';
+                container.appendChild(altInput);
+            });
+        }
+
+        document.getElementById('fileUpload').addEventListener('click', () => {
+            document.getElementById('fileInput').click();
+        });

@@ -1,0 +1,46 @@
+extends layout
+
+block content
+    .header
+        h1 Post History
+        p View all your published posts
+
+    .card
+        .card-header
+            h2.card-title Published Posts
+        .card-body
+            if history.length > 0
+                table.table
+                    thead
+                        tr
+                            th Text
+                            th Media Type
+                            th Published At
+                            th Thread ID
+                            th Container ID
+                    tbody
+                        each item in history
+                            tr
+                                td
+                                    if item.text
+                                        = item.text.substring(0, 60) + (item.text.length > 60 ? '...' : '')
+                                    else
+                                        em No text
+                                td
+                                    = item.media_type || 'TEXT'
+                                td
+                                    - const publishedDate = new Date(item.published_at * 1000)
+                                    = publishedDate.toLocaleString()
+                                td
+                                    if item.thread_id
+                                        a(href=`https://www.threads.net/t/${item.thread_id}`, target='_blank')= item.thread_id
+                                    else
+                                        em N/A
+                                td
+                                    = item.container_id
+            else
+                .empty-state
+                    .empty-state-icon 📜
+                    .empty-state-title No post history
+                    .empty-state-description
+                        | Your published posts will appear here.

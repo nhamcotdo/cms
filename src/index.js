@@ -8,6 +8,8 @@
 const express = require('express');
 const session = require('express-session');
 const bodyParser = require('body-parser');
+const methodOverride = require('method-override');
+const cookieParser = require('cookie-parser');
 const axios = require('axios');
 const https = require('https');
 const path = require('path');
@@ -20,6 +22,10 @@ const textParser = require('../public/scripts/text-parser.js');
 const spoilerMarker = "**spoiler**";;
 const app = express();
 const upload = multer();
+
+const { initializeDatabase } = require('./database/init');
+const scheduler = require('./services/scheduler');
+const adminRouter = require('./routes/admin');
 
 const DEFAULT_THREADS_QUERY_LIMIT = 10;
 
@@ -143,10 +149,13 @@ const SCOPES = [
 ];
 
 app.use(express.static('public'));
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 app.set('views', path.join(__dirname, '../views'));
 app.set('view engine', 'pug');
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
+app.use(cookieParser(process.env.SESSION_SECRET));
+app.use(methodOverride('_method'));
 app.use(
     session({
         secret: process.env.SESSION_SECRET,
@@ -158,9 +167,15 @@ app.use(
     })
 );
 
+app.use('/admin', adminRouter);
+
 // Middleware to ensure the user is logged in
 const loggedInUserChecker = (req, res, next) => {
-    if (req.session.access_token) {
+    // Check session first, then cookie, then initial values
+    const accessToken = req.session.access_token || req.signedCookies.access_token;
+
+    if (accessToken) {
+        req.session.access_token = accessToken; // Sync session with cookie
         next();
     } else if (initial_access_token && initial_user_id) {
         useInitialAuthenticationValues(req);
@@ -172,9 +187,18 @@ const loggedInUserChecker = (req, res, next) => {
 };
 
 app.get('/', async (req, res) => {
-    if (!req.session.access_token && initial_access_token && initial_user_id) {
+    initializeDatabase();
+
+    const accessToken = req.session.access_token || req.signedCookies.access_token;
+
+    if (accessToken && !req.session.access_token) {
+        req.session.access_token = accessToken;
+        scheduler.initialize(accessToken);
+        res.redirect('/admin/dashboard');
+    } else if (!req.session.access_token && initial_access_token && initial_user_id) {
         useInitialAuthenticationValues(req);
-        res.redirect('/account');
+        scheduler.initialize(req.session.access_token);
+        res.redirect('/admin/dashboard');
     } else {
         res.render('index', {
             title: 'Index',
@@ -246,7 +270,18 @@ app.get('/callback', async (req, res) => {
         } catch (e) {
             console.error(e?.response?.data?.error?.message ?? e.message);
         }
-        res.redirect('/account');
+
+        // Save access token to signed cookie (expires in 60 days)
+        res.cookie('access_token', req.session.access_token, {
+            signed: true,
+            maxAge: 60 * 24 * 60 * 60 * 1000, // 60 days
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+        });
+
+        scheduler.initialize(req.session.access_token);
+        res.redirect('/admin/dashboard');
     } catch (err) {
         console.error(err?.response?.data);
         res.render('index', {
@@ -1081,6 +1116,14 @@ app.get('/keywordSearch', loggedInUserChecker, async (req, res) => {
 
 // Logout route to kill the session
 app.get('/logout', (req, res) => {
+    // Clear the signed cookie
+    res.clearCookie('access_token', {
+        signed: true,
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+    });
+
     if (req.session) {
         req.session.destroy((err) => {
             if (err) {
@@ -1090,7 +1133,7 @@ app.get('/logout', (req, res) => {
             }
         });
     } else {
-        res.render('index', { response: 'Token not stored in session' });
+        res.render('index', { response: 'Logout not stored in session' });
     }
 });
 

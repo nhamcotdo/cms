@@ -1,0 +1,95 @@
+extends layout
+
+block content
+    .header
+        h1 Dashboard
+        p Welcome to your Threads Admin Panel
+
+    .stats-grid
+        .stat-card.success
+            .stat-label Scheduled Posts
+            .stat-value= stats.scheduled
+
+        .stat-card.warning
+            .stat-label Drafts
+            .stat-value= stats.drafts
+
+        .stat-card.info
+            .stat-label Published Today
+            .stat-value= stats.published
+
+        .stat-card
+            .stat-label Total Posts
+            .stat-value= stats.totalPosts
+
+        .stat-card
+            .stat-label Media Files
+            .stat-value= stats.media
+
+        .stat-card(class=stats.failed > 0 ? 'danger' : '')
+            .stat-label Failed Posts
+            .stat-value= stats.failed
+
+    if recentPosts.length > 0
+        .card
+            .card-header
+                h2.card-title Recent Posts
+            .card-body
+                table.table
+                    thead
+                        tr
+                            th Text
+                            th Status
+                            th Scheduled For
+                            th Actions
+                    tbody
+                        each post in recentPosts
+                            tr
+                                td
+                                    if post.text
+                                        = post.text.substring(0, 50) + (post.text.length > 50 ? '...' : '')
+                                    else
+                                        em No text
+                                td
+                                    span.badge(class='badge-' + post.status)= post.status
+                                td
+                                    if post.scheduled_for
+                                        = new Date(post.scheduled_for * 1000).toLocaleString()
+                                    else
+                                        em Not scheduled
+                                td
+                                    .action-buttons
+                                        a.btn.btn-sm.btn-secondary(href='/admin/scheduled/' + post.id + '/edit') Edit
+                                        if post.status === 'scheduled'
+                                            button.btn.btn-sm.btn-danger(type='button', onclick='deletePost(' + post.id + ')') Delete
+    else
+        .card
+            .card-body
+                .empty-state
+                    .empty-state-icon 📝
+                    .empty-state-title No posts yet
+                    .empty-state-description
+                        | Create your first post to get started.
+                        a.btn.btn-primary(href='/admin/create' style='margin-left: 10px') Create Post
+
+block scripts
+    script.
+        async function deletePost(postId) {
+            if (!confirm('Are you sure you want to delete this post?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/admin/scheduled/' + postId, {
+                    method: 'DELETE',
+                });
+
+                if (response.ok) {
+                    window.location.reload();
+                } else {
+                    alert('Failed to delete post');
+                }
+            } catch (error) {
+                alert('Error deleting post: ' + error.message);
+            }
+        }

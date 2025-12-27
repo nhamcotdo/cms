@@ -1,0 +1,103 @@
+extends layout
+
+block content
+    .header
+        h1 Scheduled Posts
+        p Manage your scheduled and draft posts
+
+    .card
+        .card-header
+            h2.card-title Posts
+            a.btn.btn-primary(href='/admin/create') Create New Post
+        .card-body
+            if posts.length > 0
+                table.table
+                    thead
+                        tr
+                            th Text
+                            th Status
+                            th Scheduled For
+                            th Media Type
+                            th Actions
+                    tbody
+                        each post in posts
+                            tr
+                                td
+                                    if post.text
+                                        = post.text.substring(0, 60) + (post.text.length > 60 ? '...' : '')
+                                    else
+                                        em No text
+                                td
+                                    span.badge(class='badge-' + post.status)= post.status
+                                td
+                                    if post.scheduled_for
+                                        - const scheduledDate = new Date(post.scheduled_for * 1000)
+                                        = scheduledDate.toLocaleString()
+                                        if post.status === 'scheduled' && scheduledDate < new Date()
+                                            br
+                                            small.text-danger Due now
+                                    else
+                                        em Not scheduled
+                                td
+                                    = post.media_type || 'TEXT'
+                                td
+                                    .action-buttons
+                                        if post.status === 'scheduled'
+                                            button.btn.btn-sm.btn-success(type='button', onclick='publishNow(' + post.id + ')') Publish Now
+                                        a.btn.btn-sm.btn-secondary(href='/admin/scheduled/' + post.id + '/edit') Edit
+                                        button.btn.btn-sm.btn-danger(type='button', onclick='deletePost(' + post.id + ')') Delete
+                                        if post.error_message
+                                            br
+                                            small.text-danger(title=post.error_message) Failed
+            else
+                .empty-state
+                    .empty-state-icon ⏰
+                    .empty-state-title No scheduled posts
+                    .empty-state-description
+                        | Schedule your first post to get started.
+                        a.btn.btn-primary(href='/admin/create' style='margin-left: 10px') Create Post
+
+block scripts
+    script.
+        async function deletePost(postId) {
+            if (!confirm('Are you sure you want to delete this post?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/admin/scheduled/' + postId, {
+                    method: 'DELETE',
+                });
+
+                if (response.ok) {
+                    window.location.reload();
+                } else {
+                    alert('Failed to delete post');
+                }
+            } catch (error) {
+                alert('Error deleting post: ' + error.message);
+            }
+        }
+
+        async function publishNow(postId) {
+            if (!confirm('Are you sure you want to publish this post now?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/admin/scheduled/' + postId + '/publish', {
+                    method: 'POST',
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    alert('Post published successfully!');
+                    window.location.reload();
+                } else {
+                    alert('Failed to publish post: ' + data.message);
+                }
+            } catch (error) {
+                alert('Error publishing post: ' + error.message);
+            }
+        }

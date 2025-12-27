@@ -1,0 +1,53 @@
+doctype html
+html
+  head
+    title Threads Admin Panel - #{title}
+    link(rel='stylesheet' href='/css/style.css')
+    link(rel='stylesheet' href='/css/admin/admin.css')
+    meta(name='viewport' content='width=device-width, initial-scale=1.0')
+  body
+    aside.sidebar
+      .sidebar-header
+        h2 Threads Admin
+      ul.sidebar-nav
+        li
+          a(href='/admin/dashboard' class=currentPage === 'dashboard' ? 'active' : '')
+            span.icon 📊
+            | Dashboard
+        li
+          a(href='/admin/create' class=currentPage === 'create' ? 'active' : '')
+            span.icon ✏️
+            | Create Post
+        li
+          a(href='/admin/scheduled' class=currentPage === 'scheduled' ? 'active' : '')
+            span.icon ⏰
+            | Scheduled Posts
+        li
+          a(href='/admin/history' class=currentPage === 'history' ? 'active' : '')
+            span.icon 📜
+            | Post History
+        li
+          a(href='/admin/media' class=currentPage === 'media' ? 'active' : '')
+            span.icon 🖼️
+            | Media Library
+        li
+          a(href='/account' class=currentPage === 'account' ? 'active' : '')
+            span.icon 👤
+            | My Account
+        li
+          a(href='/logout')
+            span.icon 🚪
+            | Logout
+
+    main.main-content
+      block content
+
+    if (message)
+      .alert.alert-success
+        span= message
+
+    if(error)
+      .alert.alert-error
+        span= error
+
+    block scripts
