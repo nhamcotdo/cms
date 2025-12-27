@@ -1,0 +1,105 @@
+extends layout_with_account
+
+block content
+    table
+        thead
+            tr
+                th Field
+                th Value
+        tbody
+            tr
+                td Thread ID
+                td #{threadId}
+            tr
+                td Author
+                td #{username}
+            tr
+                td Created On
+                td #{timestamp}
+            tr
+                td Permalink
+                td
+                    a(href=permalink target='_blank') #{permalink}
+            tr
+                td Text
+                td #{text}
+            tr
+                td Text Entities
+                td #{text_entities}
+            tr
+                td Topic Tag
+                td #{topic_tag}
+            tr
+                td Media Type
+                td #{media_type}
+            tr
+                td Media URL
+                td
+                    a(href=media_url target='_blank') #{media_url}
+            tr
+                td Is Spoiler Media Post
+                td #{is_spoiler_media}
+            tr
+                td GIF URL
+                td
+                    a(href=gif_url target='_blank') #{gif_url}
+            tr
+                td Alt Text
+                td #{alt_text}
+            tr
+                td Link Attachment URL
+                td #{link_attachment_url}
+            tr
+                td Poll
+                td
+                    if option_a && option_b
+                        table
+                            tr
+                                td Option A
+                                td #{option_a}
+                            tr
+                                td Option B
+                                td #{option_b}
+                            tr
+                                td Option C
+                                td #{option_c}
+                            tr
+                                td Option D
+                                td #{option_d}
+            tr
+                td Replies
+                td
+                    a(href=`/threads/${threadId}/replies?username=${username}`) View Direct Replies
+                    br
+                    if (!is_reply)
+                        a(href=`/threads/${threadId}/conversation?username=${username}`) View Conversation
+            tr
+                td Reply Audience
+                td #{reply_audience}
+            tr
+                td Is Quote Post
+                td #{is_quote_post}
+            tr
+                td Quoted Post
+                td
+                    if (quoted_post)
+                        a(href=`/threads/${quoted_post.id}`) View Quoted Post
+            tr
+                td Reposted Post
+                td
+                    if (reposted_post)
+                        a(href=`/threads/${reposted_post.id}`) View Reposted Post
+            tr
+                td Insights
+                td
+                    a(href=`/threads/${threadId}/insights`) View Insights
+            tr
+                td Quote
+                td
+                    button(onclick=`location.href='/upload?quotePostId=${threadId}'`) Quote
+            tr
+                td Repost
+                td
+                    form(action='/repost' method='post')
+                        input(type='hidden' name='repostId' value=threadId)
+                        button(type='submit') Repost

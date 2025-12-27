@@ -1,0 +1,45 @@
+extends layout_with_account
+
+block content
+    table
+        tbody
+            tr
+                th(colspan=2) Quota Usage
+                td(colspan=2)=quotaUsage
+            tr
+                th(rowspan=2) Config
+                th Quota Total
+                td=config.quota_total
+            tr
+                th Quota Duration
+                td=config.quota_duration
+            tr
+                th(colspan=2) Reply Quota Usage
+                td(colspan=2)=replyQuotaUsage
+            tr
+                th(rowspan=2) Reply Config
+                th Reply Quota Total
+                td=replyConfig.quota_total
+            tr
+                th Reply Quota Duration
+                td=replyConfig.quota_duration
+            tr
+                th(colspan=2) Delete Quota Usage
+                td(colspan=2)=deleteQuotaUsage
+            tr
+                th(rowspan=2) Delete Config
+                th Delete Quota Total
+                td=deleteConfig.quota_total
+            tr
+                th Delete Quota Duration
+                td=deleteConfig.quota_duration
+            tr
+                th(colspan=2) Location Search Quota Usage
+                td(colspan=2)=locationSearchQuotaUsage
+            tr
+                th(rowspan=2) Location Search Config
+                th Location Search Quota Total
+                td=locationSearchConfig.quota_total
+            tr
+                th Location Search Quota Duration
+                td=locationSearchConfig.quota_duration

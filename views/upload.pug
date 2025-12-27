@@ -1,0 +1,157 @@
+extends layout_with_account
+
+block content
+    style(type="text/css").
+        div.attachments-area {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+        div.attachment-controls {
+            height: 100%;
+            display: flex;
+            flex-direction: row;
+            justify-content: center;
+        }
+        div.attachment-item {
+            display: flex;
+            flex-direction: row;
+            justify-content: center;
+            margin-bottom: 12px;
+        }
+        div.attachment-item-details {
+            display: flex;
+            flex-direction: column;
+        }
+        div.attachment-item-type-and-url {
+            display: flex;
+            flex-direction: row;
+        }
+        textarea::placeholder {
+            text-align: center;
+            line-height: 15px;
+        }
+        textarea {
+            text-align: center;
+            padding: 5px 0;
+            border-radius: 20px;
+            height: 100px;
+        }
+        img {
+            margin-bottom: 15px;
+        }
+        #reply-control {
+            margin-bottom: 15px;
+        }
+        #topic-tag {
+            width: 200px;
+            margin-bottom: 15px;
+        }
+        #link-attachment {
+            width: 200px;
+            margin-bottom: 15px;
+        }
+        #quote-post-id {
+            width: 200px;
+        }
+        .spoiler-media-control {
+            display: none;
+        }
+
+    if (replyToId !== undefined)
+        p(style='color: gray') Replying to #{replyToId}
+
+    form(action='/upload' id='form' method='POST')
+        label(for='text')
+        | Text:
+        textarea(placeholder='Start a thread...' id='text' name='text' autocomplete='off')
+        br
+        | To attach an image or video, click the image below
+        div.attachments-area
+            img#attachments-button(src='/img/attachment.png')
+            div.attachment-controls
+                div#attachments-list.attachments
+        div.spoiler-media-control
+            label(for='spoilerMedia')
+            |   Mark Media as Spoiler &nbsp;&nbsp;
+            input(type='checkbox' name='spoilerMedia' value='true')
+        br
+
+        label(for="reply-control") Who Can Reply
+        select#reply-control(name='replyControl' hint="Reply Control")
+            option(value="" selected)
+            option(value="everyone") Everyone
+            option(value="accounts_you_follow") Accounts You Follow
+            option(value="mentioned_only") Mentioned Only
+            option(value="parent_post_author_only") Parent Post Author Only
+            option(value="followers_only") Followers Only
+
+        label(for='topicTag')
+        |   Topic Tag
+        input#topic-tag(type='text' name='topicTag' value='' maxlength='50')
+
+        label(for='linkAttachment')
+        |   Link Attachment
+        input#link-attachment(type='text' name='linkAttachment' value='')
+
+        label(for="autoPublishText")
+        input(type="checkbox" name="autoPublishText" id="autoPublishText")
+        | Auto-Publish (only for text posts)
+
+        button#poll-attachment-button(type='button' name='pollAttachment') Attach Poll 🗳️
+        div#poll-attachment-options(style='display:none')
+            div.poll-attachment-option
+                label(for='pollOptionA')
+                | Option A &nbsp;&nbsp;
+                input(type='text' name='pollOptionA' autocomplete='off')
+
+            div.poll-attachment-option
+                label(for='pollOptionB')
+                | Option B &nbsp;&nbsp;
+                input(type='text' name='pollOptionB' autocomplete='off')
+
+            div.poll-attachment-option
+                label(for='pollOptionC')
+                | Option C &nbsp;&nbsp;
+                input(type='text' name='pollOptionC' autocomplete='off')
+
+            div.poll-attachment-option
+                label(for='pollOptionD')
+                | Option D &nbsp;&nbsp;
+                input(type='text' name='pollOptionD' autocomplete='off')
+
+        if quotePostId
+            a(href=`/threads/${quotePostId}`) Quoting #{quotePostId}
+            input#quote-post-id(type='hidden' name='quotePostId' value=quotePostId)
+
+        input(type='hidden' name='replyToId' value=replyToId)
+        input.threads-button(type='submit' id='submit' value='Post')
+
+        p#media-type-explanation Media Type:&nbsp;
+            span#media-type
+
+    script#attachment-template(type='text/template')
+        div.attachment-item
+            div.attachment-item-details
+                div.attachment-item-type-and-url
+                    label(for='attachmentType')
+                    | Type &nbsp;&nbsp;
+                    select(name='attachmentType[]')
+                        option(value='Image') Image
+                        option(value='Video') Video
+                    label(for='attachmentUrl')
+                    | URL &nbsp;&nbsp;
+                    input(type='text' name='attachmentUrl[]' autocomplete='off')
+                div.attachment-item-alt-text
+                    label(for='attachmentAltText')
+                    |   Alt Text &nbsp;&nbsp;
+                    input(type='text' name='attachmentAltText[]' value='')
+
+            // The parent of this node will be removed from the DOM
+            span.delete ❌
+            br
+
+block scripts
+    script(src='/scripts/form.js' type='text/javascript')
+    script(src='/scripts/upload.js' type='text/javascript')
