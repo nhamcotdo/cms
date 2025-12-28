@@ -538,10 +538,10 @@ app.post('/publish', upload.array(), async (req, res) => {
 https
     .createServer(
         {
-            key: fs.readFileSync(
-                path.join(__dirname, '../' + HOST + '-key.pem')
-            ),
-            cert: fs.readFileSync(path.join(__dirname, '../' + HOST + '.pem')),
+            // key: fs.readFileSync(
+            //     path.join(__dirname, '../' + HOST + '-key.pem')
+            // ),
+            // cert: fs.readFileSync(path.join(__dirname, '../' + HOST + '.pem')),
         },
         app
     )

@@ -1,56 +1,222 @@
-# Threads Publishing API Sample App
+# Threads Admin Panel
 
-> ⚠️ We will update the sample app over time. Please note that all of the latest features may not be demonstrated in the sample app. Please refer to the [developer documentation changelog](https://developers.facebook.com/docs/threads/changelog) for the most up-to-date features.
+> Admin panel for managing Threads API - Schedule posts, manage multiple accounts, analytics, and more.
 
-You can use this Sample App to test the [Threads API](https://developers.facebook.com/docs/threads).
+## Features
 
-1. Make sure that you are using the APP ID and Secret defined for the Threads API of your app. These ARE not the same as the regular app ID and app secret.
-2. Make sure you add your application's redirect URL e.g. https://threads-sample.meta:8000/callback, to your app's redirect callback URLs in the app dashboard.
+- **Multi-Account Management**: Connect and manage multiple Threads accounts
+- **Post Scheduling**: Create and schedule posts for automatic publishing
+- **Media Support**: Upload images and videos with your posts
+- **Bulk Import**: Import posts from CSV/JSON files
+- **Analytics**: Track engagement metrics (likes, comments, shares)
+- **Comments Management**: View and manage post comments
+- **Post History**: Track all published posts
+- **Modern UI**: Neo-Brutalist Tech Dashboard design
 
-## Required software
+## Requirements
 
-In order to run the Sample App you will need to install some required software, as follows:
+- Node.js 18.x or higher
+- npm or yarn
+- PM2 (for production deployment)
 
--   Node JS
+## Quick Start
 
-## Running the Sample App
+### Option 1: Automated Installation (Recommended)
 
-Note: If you are using devcontainers, ensure that containers are enabled and supported by your IDE.
+Run the installation script:
 
-1. Install necessary tools
+```bash
+./install.sh
+```
 
-    - If you are using a [devcontainer](https://code.visualstudio.com/docs/devcontainers/containers), skip to step 2.
-    - Install [nodeJS](https://nodejs.org/en/download/) to run the application. If you're using a Mac, you can install it via Homebrew: `brew install node`
-    - Install [mkcert](https://mkcert.org/) to create the OpenSSL Certificate. If you're using a Mac, you can install it via Homebrew: `brew install mkcert`
+The script will:
+- Check and install dependencies
+- Create `.env` file from `.env.example`
+- Set up necessary directories
+- Guide you through Threads App credentials setup
 
-2. Run `npm install` in your terminal
+### Option 2: Manual Installation
 
-3. Create a new file called `.env` and copy/paste all the environment variables from `.env.template`. Replace any environnment variables that have placeholders, such as APP_ID.
+1. **Install dependencies**
 
-4. Map a domain to your local machine for local development
+```bash
+npm install
+```
 
-    - Note: Threads apps do not support redirect URLs with using `localhost` so you must map a domain to test locally this Sample App.
-    - Map a new entry in your hosts file to the domain that you will use to test the Sample App e.g. `threads-sample.meta`.
-    - If you're using a Linux or Mac, this will be your `/etc/hosts` file.
-    - Add an entry like so:
-        ```
-        127.0.0.1   threads-sample.meta
-        ```
-    - This will map threads-sample.meta to localhost, so you may visit https://threads-sample.meta:8000 to see the Threads Sample App.
-    - This domain must match the one defined in your `.env` file as the value of the `HOST` variable.
+2. **Configure environment**
 
-5. Create an OpenSSL Cert
+```bash
+cp .env.example .env
+```
 
-    - OAuth redirects are only supported over HTTPS so you must create an SSL certificate
-    - `mkcert threads-sample.meta` - This will create pem files for SSL.
-    - You will see `threads-sample.meta.pem` and `threads-sample.meta-key.pem `files generated.
-    - If you are using a host that is different than `threads-sample.meta` then replace it with your specific domain.
+Edit `.env` with your Threads App credentials:
+- `THREADS_APP_ID`: Get from [Meta for Developers](https://developers.facebook.com/apps/)
+- `THREADS_APP_SECRET`: Get from app dashboard
+- `THREADS_REDIRECT_URI`: Your callback URL (e.g., `http://localhost:8000/login`)
 
-6. Run the Sample App
-    - Run `npm start` from the command line.
-    - Once the Sample App starts running, go to https://threads-sample.meta:8000 to test the workflow.
-    - If you are using a different domain or port then replace those values accordingly.
+3. **Create admin user**
+
+The first time you access the admin panel, you'll be prompted to create an admin account.
+
+4. **Start the application**
+
+```bash
+# Development
+npm run dev
+
+# Production with PM2
+pm2 start ecosystem.config.js
+pm2 save
+```
+
+5. **Access the panel**
+
+Open http://localhost:8000/admin/auth/login in your browser.
+
+## Threads App Setup
+
+1. Go to [Meta for Developers](https://developers.facebook.com/apps/)
+2. Create a new app
+3. Select "Threads" as the use case
+4. Add "Threads API" product
+5. Copy your App ID and App Secret to `.env`
+6. Add your redirect URI to app settings
+
+## Directory Structure
+
+```
+threads_api/
+├── src/
+│   ├── database/        # Database models and migrations
+│   ├── routes/          # Express routes
+│   ├── services/        # Business logic (scheduler, analytics, etc.)
+│   ├── middleware/      # Express middleware
+│   └── index.js         # Application entry point
+├── views/
+│   └── admin/           # Pug templates for admin panel
+├── public/
+│   ├── css/             # Stylesheets
+│   ├── js/              # Client-side JavaScript
+│   └── img/             # Images and logos
+├── logs/                # Application logs
+└── threads_admin.db     # SQLite database
+```
+
+## PM2 Commands
+
+```bash
+# Start application
+pm2 start ecosystem.config.js
+
+# Restart application
+pm2 restart threads-admin
+
+# Stop application
+pm2 stop threads-admin
+
+# View logs
+pm2 logs threads-admin
+
+# Monitor
+pm2 monit
+
+# Save process list
+pm2 save
+
+# Startup on boot
+pm2 startup
+```
+
+## Environment Variables
+
+See `.env.example` for all available configuration options.
+
+Key variables:
+- `PORT`: Server port (default: 8000)
+- `HOST`: Server host (default: localhost)
+- `THREADS_APP_ID`: Your Threads app ID
+- `THREADS_APP_SECRET`: Your Threads app secret
+- `THREADS_REDIRECT_URI`: OAuth redirect URI
+- `SESSION_SECRET`: Random string for session encryption
+- `NODE_ENV`: development or production
+
+## Database
+
+This application uses SQLite for data storage.
+
+Database file: `threads_admin.db`
+
+Tables:
+- `accounts` - Threads accounts
+- `admin_users` - Admin users
+- `admin_sessions` - Active sessions
+- `scheduled_posts` - Scheduled/published posts
+- `media_files` - Uploaded media
+- `post_history` - Published post history
+- `post_analytics` - Engagement metrics
+- `post_comments` - Post comments
+- `bulk_imports` - Bulk import records
+
+## Troubleshooting
+
+### Scheduler not running
+
+Check if the scheduler is initialized:
+```bash
+pm2 logs threads-admin | grep "Scheduler"
+```
+
+Should see: "Scheduler started - checking every minute"
+
+### Posts not publishing
+
+1. Check post has `account_id` set
+2. Verify account has valid `access_token`
+3. Check post `scheduled_for` timestamp is in the past
+4. Check logs for errors: `pm2 logs threads-admin`
+
+### Database errors
+
+If you see migration errors, the database schema may be out of sync. Backup and reinitialize:
+```bash
+cp threads_admin.db threads_admin.db.backup
+rm threads_admin.db
+pm2 restart threads-admin
+```
+
+## Development
+
+```bash
+# Run in development mode with auto-reload
+npm run dev
+
+# Run tests
+npm test
+
+# Lint code
+npm run lint
+```
+
+## Production Deployment
+
+1. Set `NODE_ENV=production` in `.env`
+2. Use a reverse proxy (nginx) for SSL
+3. Configure proper logging
+4. Set up monitoring with PM2
+5. Configure automatic backups
+
+## Security
+
+- Use strong `SESSION_SECRET`
+- Enable HTTPS in production
+- Keep `THREADS_APP_SECRET` secure
+- Regularly update dependencies
+- Use firewall to restrict database access
 
 ## License
 
 Threads API is Meta Platform Policy licensed, as found in the LICENSE file.
+
+## Support
+
+For Threads API documentation: https://developers.facebook.com/docs/threads

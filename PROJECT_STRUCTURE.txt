@@ -1,0 +1,130 @@
+THREADS API - Next.js 15 Migration Project Structure
+=====================================================
+
+threads_api/
+│
+├── app/                                    # Next.js App Router
+│   ├── (auth)/                            # Auth route group (no layout)
+│   │   └── login/
+│   │       └── page.tsx                   # Login page (Server Component)
+│   │
+│   ├── (dashboard)/                       # Protected dashboard routes
+│   │   ├── layout.tsx                     # Dashboard layout with sidebar
+│   │   └── dashboard/
+│   │       └── page.tsx                   # Dashboard home page
+│   │
+│   ├── api/                               # API Routes (Route Handlers)
+│   │   └── auth/
+│   │       └── login/
+│   │           └── route.ts               # Login API endpoint
+│   │
+│   ├── globals.css                        # Global styles with Tailwind
+│   ├── layout.tsx                         # Root layout
+│   └── page.tsx                           # Root page (redirects to login)
+│
+├── components/                            # React components
+│   ├── ui/                                # Reusable UI components
+│   │   ├── button.tsx                     # Button with variants
+│   │   ├── card.tsx                       # Card component family
+│   │   ├── input.tsx                      # Form input
+│   │   └── label.tsx                      # Form label
+│   ├── admin/                             # Admin-specific components (TODO)
+│   └── auth/                              # Auth components (TODO)
+│
+├── lib/                                   # Shared utilities
+│   ├── db/                                # Database layer (TODO - Phase 2)
+│   ├── services/                          # Business logic (TODO - Phase 2)
+│   ├── middleware/                        # Next.js middleware (TODO - Phase 3)
+│   └── utils/
+│       ├── cn.ts                          # Class name utility
+│       └── date.ts                        # Date formatting utilities
+│
+├── types/                                 # TypeScript type definitions
+│   ├── database.ts                        # Database model types
+│   └── index.ts                           # General types
+│
+├── public/                                # Static assets
+│   └── uploads/                           # User uploaded files
+│
+├── src/                                   # LEGACY Express.js code
+│   ├── database/                          # SQLite models & schema
+│   ├── routes/                            # Express routes
+│   ├── services/                          # Business logic (scheduler, etc.)
+│   ├── middleware/                        # Auth middleware
+│   └── index.js                           # Express app entry point
+│
+├── views/                                 # LEGACY Pug templates
+│   └── admin/                             # Admin panel templates
+│
+├── Configuration Files
+│   ├── next.config.js                     # Next.js configuration
+│   ├── tsconfig.json                      # TypeScript configuration
+│   ├── tailwind.config.ts                 # Tailwind CSS configuration
+│   ├── postcss.config.mjs                 # PostCSS configuration
+│   ├── .eslintrc.json                     # ESLint configuration
+│   ├── .gitignore                         # Git ignore rules
+│   ├── package.json                       # Dependencies and scripts
+│   └── ecosystem.config.js                # PM2 configuration (legacy)
+│
+├── Documentation
+│   ├── README.md                          # Original README
+│   ├── README_ADMIN.md                    # Admin panel documentation
+│   ├── MIGRATION_STATUS.md                # Migration progress tracker
+│   ├── PHASE1_COMPLETE.md                 # Phase 1 completion report
+│   └── PROJECT_STRUCTURE.txt              # This file
+│
+├── Database
+│   └── threads_admin.db                   # SQLite database
+│
+└── Environment
+    └── .env                               # Environment variables (gitignored)
+
+=====================================================
+LEGEND
+=====================================================
+
+✓  = Implemented and working
+TODO = Planned for future phases
+
+PHASE 1 (COMPLETE):
+  - app/ structure
+  - components/ui/ library
+  - lib/utils/ utilities
+  - types/ definitions
+  - Configuration files
+
+PHASE 2 (PENDING):
+  - lib/db/ database layer
+  - lib/services/ business logic
+
+PHASE 3 (PENDING):
+  - lib/middleware/ auth middleware
+  - Complete authentication system
+
+PHASE 4 (PENDING):
+  - app/api/ route handlers
+  - Server Actions
+
+PHASE 5+ (PENDING):
+  - components/admin/ admin components
+  - UI pages migration
+  - File upload system
+  - Background scheduler
+
+=====================================================
+COMMANDS
+=====================================================
+
+Development:
+  npm run dev          # Start Next.js dev server (port 3000)
+  npm run start:legacy # Start Express server (port 3001)
+
+Production:
+  npm run build        # Build Next.js for production
+  npm run start        # Start Next.js production server
+
+Maintenance:
+  npm run lint         # Run ESLint
+  npm run format:write # Format code with Prettier
+
+=====================================================

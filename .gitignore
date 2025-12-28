@@ -51,6 +51,15 @@ dist/
 build/
 *.tsbuildinfo
 
+# Next.js
+.next/
+out/
+.vercel/
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
 # Temporary files
 tmp/
 temp/
