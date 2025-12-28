@@ -302,7 +302,6 @@ app.get('/callback', async (req, res) => {
             sameSite: 'lax',
         });
 
-        scheduler.initialize(req.session.access_token);
         res.redirect('/admin/platforms');
     } catch (err) {
         console.error(err?.response?.data);
@@ -551,6 +550,9 @@ https
             console.error(`Error: ${err}`);
         }
         console.log(`listening on port ${PORT}!`);
+
+        // Start the post scheduler
+        scheduler.initialize();
     });
 
 /**

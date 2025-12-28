@@ -5,6 +5,7 @@
 
 const cron = require('node-cron');
 const { ScheduledPostsModel, PostHistoryModel, POST_STATUS } = require('../database/models');
+const { AccountsModel } = require('../database/accountModels');
 const axios = require('axios');
 const https = require('https');
 const { URL } = require('url');
@@ -18,15 +19,13 @@ class PostScheduler {
     /**
      * Initialize and start the scheduler
      */
-    initialize(accessToken) {
+    initialize() {
         if (this.isRunning) {
             console.log('Scheduler is already running');
             return;
         }
 
         console.log('Initializing post scheduler...');
-
-        this.accessToken = accessToken;
 
         this.schedulerTask = cron.schedule('* * * * *', async () => {
             await this.processScheduledPosts();
@@ -37,21 +36,16 @@ class PostScheduler {
     }
 
     /**
-     * Update access token
+     * Update access token (deprecated - kept for compatibility)
      */
     updateAccessToken(accessToken) {
-        this.accessToken = accessToken;
+        console.warn('updateAccessToken is deprecated. Scheduler now uses account access tokens from database.');
     }
 
     /**
      * Process all scheduled posts that are due
      */
     async processScheduledPosts() {
-        if (!this.accessToken) {
-            console.log('No access token available, skipping scheduled posts');
-            return;
-        }
-
         try {
             const duePosts = ScheduledPostsModel.getDuePosts();
 
@@ -79,6 +73,21 @@ class PostScheduler {
 
         try {
             console.log(`Publishing scheduled post ${post.id}...`);
+
+            // Load the account associated with this post
+            const accountId = post.account_id;
+            const postAccount = accountId ? AccountsModel.findById(accountId) : null;
+
+            if (!postAccount || !postAccount.access_token) {
+                console.error(`No valid account found for post ${post.id}. Skipping.`);
+                ScheduledPostsModel.update(post.id, {
+                    status: POST_STATUS.FAILED,
+                    error_message: 'No valid account found for this post',
+                });
+                return;
+            }
+
+            const accessToken = postAccount.access_token;
 
             ScheduledPostsModel.update(post.id, {
                 status: POST_STATUS.PUBLISHING,
@@ -149,7 +158,7 @@ class PostScheduler {
             const postThreadsUrl = this.buildGraphAPIURL(
                 `me/threads`,
                 params,
-                this.accessToken,
+                accessToken,
                 GRAPH_API_BASE_URL
             );
 
@@ -192,7 +201,7 @@ class PostScheduler {
                     container_id: containerId,
                 });
 
-                await this.publishContainer(containerId, post.id);
+                await this.publishContainer(containerId, post.id, accessToken);
             }
 
             console.log(`Successfully published scheduled post ${post.id}`);
@@ -227,7 +236,7 @@ class PostScheduler {
     /**
      * Publish a container to make it live
      */
-    async publishContainer(containerId, postId) {
+    async publishContainer(containerId, postId, accessToken) {
         const agent = new https.Agent({
             rejectUnauthorized: process.env.REJECT_UNAUTHORIZED !== 'false',
         });
@@ -240,7 +249,7 @@ class PostScheduler {
                 {
                     creation_id: containerId,
                 },
-                this.accessToken,
+                accessToken,
                 GRAPH_API_BASE_URL
             );
 
