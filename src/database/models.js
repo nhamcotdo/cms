@@ -352,10 +352,28 @@ const UserSettingsModel = {
     },
 };
 
+// Re-export account models for convenience
+const {
+    AccountsModel,
+    AccountCookiesModel,
+    AdminUsersModel,
+    AdminSessionsModel,
+    PostAnalyticsModel,
+    PostCommentsModel,
+    BulkImportsModel,
+} = require('./accountModels');
+
 module.exports = {
     POST_STATUS,
     ScheduledPostsModel,
     MediaFilesModel,
     PostHistoryModel,
     UserSettingsModel,
+    AccountsModel,
+    AccountCookiesModel,
+    AdminUsersModel,
+    AdminSessionsModel,
+    PostAnalyticsModel,
+    PostCommentsModel,
+    BulkImportsModel,
 };

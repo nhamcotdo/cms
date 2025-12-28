@@ -31,6 +31,10 @@ function initializeDatabase() {
         const schema = fs.readFileSync(SCHEMA_PATH, 'utf-8');
         db.exec(schema);
 
+        // Run migrations
+        const { runMigrations } = require('./migrations/runner');
+        runMigrations();
+
         console.log('Database initialized successfully');
         return db;
     } catch (error) {

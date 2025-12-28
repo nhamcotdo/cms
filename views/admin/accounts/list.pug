@@ -1,0 +1,121 @@
+extends ../layout
+
+block content
+    .header
+        h1 Accounts
+        p Manage your Threads accounts
+
+    .card
+        .card-header
+            h3 Your Accounts
+            a.btn.btn-primary(href='/auth/threads') + Add Account
+        .card-body
+            if accounts.length === 0
+                .empty-state
+                    p No accounts connected yet.
+                    a.btn.btn-primary(href='/auth/threads') Connect Your First Account
+            else
+                .accounts-list
+                    each account in accounts
+                        .account-item(class=account.id === currentAccountId ? 'current' : '')
+                            .account-avatar
+                                if account.threads_profile_picture_url
+                                    img(src=account.threads_profile_picture_url, alt=account.username)
+                                else
+                                    .avatar-placeholder= account.username.charAt(0).toUpperCase()
+
+                            .account-info
+                                h4= account.username
+                                p.user-id= '@' + account.threads_user_id
+                                if !account.is_active
+                                    span-badge.badge-disabled Disabled
+                                if account.id === currentAccountId
+                                    span-badge.badge-current Current
+
+                            .account-actions
+                                if account.id !== currentAccountId
+                                    button.btn.btn-sm.btn-primary(
+                                        onclick=`switchAccount(${account.id})`
+                                    ) Switch
+                                button.btn.btn-sm.btn-secondary(
+                                    onclick=`editAccount(${account.id})`
+                                ) Edit
+                                button.btn.btn-sm.btn-danger(
+                                    onclick=`deleteAccount(${account.id}, '${account.username}')`
+                                ) Delete
+
+block scripts
+    script.
+        // Toast notification function
+        function showToast(message, type = 'success') {
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.textContent = message;
+
+            document.body.appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.add('show');
+            }, 10);
+
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => {
+                    toast.remove();
+                }, 300);
+            }, 3000);
+        }
+
+        // Switch to account
+        async function switchAccount(accountId) {
+            try {
+                const response = await fetch(`/admin/api/accounts/${accountId}/switch`, {
+                    method: 'PUT',
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showToast(data.message, 'success');
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 500);
+                } else {
+                    showToast(data.message || 'Failed to switch account', 'error');
+                }
+            } catch (error) {
+                showToast('Error: ' + error.message, 'error');
+            }
+        }
+
+        // Edit account
+        function editAccount(accountId) {
+            // For now, just show a message
+            showToast('Edit functionality coming soon', 'info');
+        }
+
+        // Delete account
+        async function deleteAccount(accountId, username) {
+            if (!confirm(`Are you sure you want to delete account @${username}?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/admin/api/accounts/${accountId}`, {
+                    method: 'DELETE',
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showToast(data.message, 'success');
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 500);
+                } else {
+                    showToast(data.message || 'Failed to delete account', 'error');
+                }
+            } catch (error) {
+                showToast('Error: ' + error.message, 'error');
+            }
+        }

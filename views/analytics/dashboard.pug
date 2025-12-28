@@ -1,0 +1,114 @@
+extends ../admin/layout
+
+block content
+    .header
+        h1 Analytics Dashboard
+        p Track your post performance and engagement
+
+    .action-buttons(style='margin-bottom: 20px')
+        button.btn.btn-primary(type='button', onclick='fetchAllAnalytics()')
+            span.icon 🔄
+            | Refresh Analytics
+
+    .stats-grid
+        .stat-card
+            .stat-label Total Posts
+            .stat-value= stats.total_posts || 0
+        .stat-card.success
+            .stat-label Total Likes
+            .stat-value= stats.total_likes || 0
+        .stat-card.info
+            .stat-label Total Comments
+            .stat-value= stats.total_comments || 0
+        .stat-card.warning
+            .stat-label Total Shares
+            .stat-value= stats.total_shares || 0
+        .stat-card
+            .stat-label Total Views
+            .stat-value= stats.total_views || 0
+        .stat-card
+            .stat-label Avg. Likes
+            .stat-value= Math.round(stats.avg_likes || 0)
+        .stat-card
+            .stat-label Avg. Comments
+            .stat-value= Math.round(stats.avg_comments || 0)
+
+    .card
+        .card-header
+            h3 Recent Posts Analytics
+            a.btn.btn-sm.btn-secondary(href='/admin/history') View All Posts
+        .card-body
+            if recentAnalytics.length === 0
+                .empty-state
+                    p No analytics data yet. Publish some posts and refresh analytics.
+            else
+                .table-responsive
+                    table.table
+                        thead
+                            tr
+                                th Post ID
+                                th Likes
+                                th Comments
+                                th Shares
+                                th Views
+                                th Updated
+                        tbody
+                            each item in recentAnalytics
+                                tr
+                                    td ##{item.post_id}
+                                    td= item.likes_count
+                                    td= item.comments_count
+                                    td= item.shares_count
+                                    td= item.views_count
+                                    td= new Date(item.fetched_at * 1000).toLocaleDateString()
+
+block scripts
+    script.
+        // Toast notification function
+        function showToast(message, type = 'success') {
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.textContent = message;
+
+            document.body.appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.add('show');
+            }, 10);
+
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => {
+                    toast.remove();
+                }, 300);
+            }, 3000);
+        }
+
+        // Fetch all analytics
+        async function fetchAllAnalytics() {
+            const btn = event.target.closest('button');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="icon">🔄</span> Refreshing...';
+
+            try {
+                const response = await fetch('/admin/analytics/api/fetch', {
+                    method: 'POST',
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showToast(data.message || 'Analytics refreshed successfully', 'success');
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1500);
+                } else {
+                    showToast(data.message || 'Failed to refresh analytics', 'error');
+                }
+            } catch (error) {
+                showToast('Error: ' + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<span class="icon">🔄</span> Refresh Analytics';
+            }
+        }

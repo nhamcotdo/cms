@@ -17,6 +17,8 @@ const textParser = require('../../public/scripts/text-parser.js');
 const axios = require('axios');
 const https = require('https');
 const path = require('path');
+const { requireAuth, requireApiAuth } = require('../middleware/auth');
+const { loadCurrentAccount, requireAccessToken } = require('../middleware/account');
 
 const spoilerMarker = '**spoiler**';
 
@@ -39,11 +41,15 @@ const PARAMS_IS_SPOILER_MEDIA = 'is_spoiler_media';
 const PARAMS__POLL_ATTACHMENT = 'poll_attachment';
 const PARAMS_TEXT_ENTITES = 'text_entities';
 
+// Apply auth and account middleware to all admin routes
+router.use(requireAuth);
+router.use(loadCurrentAccount);
+
 /**
- * Middleware to ensure user is logged in
+ * Middleware to ensure user is logged in (legacy, for compatibility)
  */
 const loggedInUserChecker = (req, res, next) => {
-    if (req.session.access_token) {
+    if (req.session.access_token || req.currentAccount) {
         next();
     } else {
         res.redirect('/?return_url=' + encodeURIComponent(req.originalUrl));
@@ -51,9 +57,70 @@ const loggedInUserChecker = (req, res, next) => {
 };
 
 /**
+ * Helper to get access token from request
+ */
+function getAccessToken(req) {
+    return req.session.access_token || req.currentAccount?.access_token;
+}
+
+/**
+ * Helper to render with common locals
+ */
+function renderWithLocals(req, res, template, locals = {}) {
+    res.render(template, {
+        ...locals,
+        currentAccount: req.currentAccount,
+    });
+}
+
+/**
+ * Platforms Route - Platform selection page
+ */
+router.get('/platforms', async (req, res) => {
+    try {
+        const { AccountsModel } = require('../database/accountModels');
+
+        // Get threads accounts for current user
+        const adminUserId = req.adminUser?.id;
+        const threadsAccounts = adminUserId
+            ? AccountsModel.findByAdminUserId(adminUserId)
+            : [];
+
+        // Get stats for threads
+        const threadsStats = {
+            total: 0,
+            published: 0,
+        };
+
+        threadsAccounts.forEach(account => {
+            const accountPosts = ScheduledPostsModel.findAll()
+                .filter(p => p.account_id === account.id);
+            threadsStats.total += accountPosts.length;
+            threadsStats.published += accountPosts.filter(p => p.status === POST_STATUS.PUBLISHED).length;
+        });
+
+        renderWithLocals(req, res, 'admin/platforms', {
+            title: 'Platforms',
+            currentPage: 'platforms',
+            threadsAccounts,
+            threadsStats,
+        });
+    } catch (error) {
+        console.error('Error loading platforms:', error);
+        renderWithLocals(req, res, 'admin/platforms', {
+            title: 'Platforms',
+            currentPage: 'platforms',
+            threadsAccounts: [],
+            threadsStats: { total: 0, published: 0 },
+            error: 'Failed to load platforms',
+        });
+    }
+});
+
+/**
  * Dashboard Route
  */
-router.get('/dashboard', loggedInUserChecker, async (req, res) => {
+router.get('/dashboard', async (req, res) => {
     try {
         const scheduledCount = ScheduledPostsModel.findAll({ status: POST_STATUS.SCHEDULED }).length;
         const draftCount = ScheduledPostsModel.findAll({ status: POST_STATUS.DRAFT }).length;
@@ -64,7 +131,7 @@ router.get('/dashboard', loggedInUserChecker, async (req, res) => {
 
         const recentPosts = ScheduledPostsModel.findAll({ limit: 5 });
 
-        res.render('admin/dashboard', {
+        renderWithLocals(req, res, 'admin/dashboard', {
             title: 'Dashboard',
             currentPage: 'dashboard',
             stats: {
@@ -79,7 +146,7 @@ router.get('/dashboard', loggedInUserChecker, async (req, res) => {
         });
     } catch (error) {
         console.error('Error loading dashboard:', error);
-        res.render('admin/dashboard', {
+        renderWithLocals(req, res, 'admin/dashboard', {
             title: 'Dashboard',
             currentPage: 'dashboard',
             error: 'Failed to load dashboard data',
@@ -90,8 +157,8 @@ router.get('/dashboard', loggedInUserChecker, async (req, res) => {
 /**
  * Create Post Route
  */
-router.get('/create', loggedInUserChecker, (req, res) => {
-    res.render('admin/create-post', {
+router.get('/create', (req, res) => {
+    renderWithLocals(req, res, 'admin/create-post', {
         title: 'Create Post',
         currentPage: 'create',
     });
@@ -370,7 +437,7 @@ router.post('/publish-now', loggedInUserChecker, upload.array(), async (req, res
         const postThreadsUrl = buildGraphAPIURL(
             `me/threads`,
             params,
-            req.session.access_token
+            req.currentAccount?.access_token || req.session.access_token
         );
 
         console.log('Publishing now with URL:', postThreadsUrl);
@@ -392,7 +459,7 @@ router.post('/publish-now', loggedInUserChecker, upload.array(), async (req, res
             const publishUrl = buildGraphAPIURL(
                 `me/threads_publish`,
                 { creation_id: containerId },
-                req.session.access_token
+                req.currentAccount?.access_token || req.session.access_token
             );
 
             const publishResponse = await axios.post(publishUrl, {}, { httpsAgent: agent });
@@ -465,6 +532,52 @@ router.delete('/scheduled/:id', loggedInUserChecker, async (req, res) => {
     } catch (error) {
         console.error('Error deleting post:', error);
         res.status(500).json({ error: true, message: 'Failed to delete post' });
+    }
+});
+
+/**
+ * Bulk delete scheduled posts
+ */
+router.delete('/api/scheduled/bulk-delete', requireApiAuth, async (req, res) => {
+    try {
+        const { ids } = req.body;
+
+        if (!ids || !Array.isArray(ids) || ids.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'No post IDs provided',
+            });
+        }
+
+        let deletedCount = 0;
+        let failedCount = 0;
+
+        for (const id of ids) {
+            try {
+                const deleted = ScheduledPostsModel.delete(id);
+                if (deleted) {
+                    deletedCount++;
+                } else {
+                    failedCount++;
+                }
+            } catch (error) {
+                console.error('Error deleting post:', id, error);
+                failedCount++;
+            }
+        }
+
+        res.json({
+            success: true,
+            message: `Deleted ${deletedCount} posts${failedCount > 0 ? ` (${failedCount} failed)` : ''}`,
+            deletedCount,
+            failedCount,
+        });
+    } catch (error) {
+        console.error('Error bulk deleting posts:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to delete posts',
+        });
     }
 });
 
@@ -620,8 +733,10 @@ router.post('/scheduled/:id/publish', loggedInUserChecker, async (req, res) => {
             media_type: post.media_type || MEDIA_TYPE__TEXT,
         };
 
+        const mediaType = post.media_type || MEDIA_TYPE__TEXT;
+
         // For TEXT posts, use auto_publish_text to skip container step
-        if (params.media_type === MEDIA_TYPE__TEXT) {
+        if (mediaType === MEDIA_TYPE__TEXT) {
             params.auto_publish_text = true;
         }
 
@@ -657,10 +772,10 @@ router.post('/scheduled/:id/publish', loggedInUserChecker, async (req, res) => {
             params[PARAMS_TEXT_ENTITES] = JSON.stringify(post.text_entities);
         }
 
-        if (post.attachment_data && (post.media_type === 'IMAGE' || post.media_type === 'VIDEO')) {
+        if (post.attachment_data && (mediaType === 'IMAGE' || mediaType === 'VIDEO')) {
             const { attachmentType, attachmentUrl, attachmentAltText } = post.attachment_data;
             addAttachmentFields(params, attachmentType[0], attachmentUrl[0], attachmentAltText[0]);
-        } else if (post.attachment_data && post.media_type === MEDIA_TYPE__CAROUSEL) {
+        } else if (post.attachment_data && mediaType === MEDIA_TYPE__CAROUSEL) {
             const { attachmentType, attachmentUrl, attachmentAltText } = post.attachment_data;
             params.children = [];
 
@@ -676,7 +791,7 @@ router.post('/scheduled/:id/publish', loggedInUserChecker, async (req, res) => {
         const postThreadsUrl = buildGraphAPIURL(
             `me/threads`,
             params,
-            req.session.access_token
+            req.currentAccount?.access_token || req.session.access_token
         );
 
         console.log('Creating container with URL:', postThreadsUrl);
@@ -701,7 +816,7 @@ router.post('/scheduled/:id/publish', loggedInUserChecker, async (req, res) => {
             const publishUrl = buildGraphAPIURL(
                 `me/threads_publish`,
                 { creation_id: containerId },
-                req.session.access_token
+                req.currentAccount?.access_token || req.session.access_token
             );
 
             const publishResponse = await axios.post(publishUrl, {}, { httpsAgent: agent });
@@ -730,12 +845,29 @@ router.post('/scheduled/:id/publish', loggedInUserChecker, async (req, res) => {
             threadId,
         });
     } catch (error) {
-        console.error('Error publishing post:', error.message);
-        if (error.response) {
-            console.error('Response data:', error.response.data);
-            console.error('Response status:', error.response.status);
+        console.error('===== Error publishing post =====');
+        console.error('Post ID:', req.params.id);
+        console.error('Error message:', error.message);
+        console.error('Error stack:', error.stack);
+
+        if (error.config) {
+            console.error('Request URL:', error.config.url);
+            console.error('Request method:', error.config.method);
+            console.error('Request headers:', JSON.stringify(error.config.headers, null, 2));
         }
-        res.status(500).json({ error: true, message: error.response?.data?.error?.message || error.message });
+
+        if (error.response) {
+            console.error('Response status:', error.response.status);
+            console.error('Response status text:', error.response.statusText);
+            console.error('Response headers:', JSON.stringify(error.response.headers, null, 2));
+            console.error('Response data:', JSON.stringify(error.response.data, null, 2));
+        }
+
+        res.status(500).json({
+            error: true,
+            message: error.response?.data?.error?.message || error.message,
+            details: error.response?.data || null
+        });
     }
 });
 

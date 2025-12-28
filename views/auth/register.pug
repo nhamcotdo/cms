@@ -1,0 +1,83 @@
+doctype html
+html
+  head
+    title Register - Threads Admin
+    link(rel='stylesheet' href='/css/admin/premium-auth.css')
+    meta(name='viewport' content='width=device-width, initial-scale=1.0')
+  body
+    .auth-container
+      .auth-card
+        .auth-header
+          h1 Threads Admin
+          p Create your admin account
+
+        if error
+          .alert.alert-error
+            span= error
+
+        form(method='POST', action='/admin/auth/register')
+          .form-group
+            label.form-label(for='username') Username
+            input.form-control#username(
+              type='text',
+              name='username',
+              placeholder='Choose a username',
+              required,
+              autofocus
+            )
+
+          .form-group
+            label.form-label(for='email') Email
+            input.form-control#email(
+              type='email',
+              name='email',
+              placeholder='your@email.com',
+              required
+            )
+
+          .form-group
+            label.form-label(for='password') Password
+            input.form-control#password(
+              type='password',
+              name='password',
+              placeholder='At least 8 characters',
+              required,
+              minlength='8'
+            )
+
+          .form-group
+            label.form-label(for='confirmPassword') Confirm Password
+            input.form-control#confirmPassword(
+              type='password',
+              name='confirmPassword',
+              placeholder='Re-enter password',
+              required
+            )
+
+          button.btn.btn-primary.btn-full(type='submit') Create Account
+
+        .auth-footer
+          p Already have an account?
+            a(href='/admin/auth/login') Sign in here
+
+    script.
+      // Auto-focus on username field
+      document.getElementById('username').focus();
+
+      // Client-side validation
+      document.querySelector('form').addEventListener('submit', function(e) {
+        const password = document.getElementById('password').value;
+        const confirmPassword = document.getElementById('confirmPassword').value;
+
+        if (password !== confirmPassword) {
+          e.preventDefault();
+          alert('Passwords do not match');
+          return false;
+        }
+
+        if (password.length < 8) {
+          e.preventDefault();
+          alert('Password must be at least 8 characters');
+          return false;
+        }
+      });

@@ -16,7 +16,6 @@ const path = require('path');
 const fs = require('fs');
 const { URLSearchParams, URL } = require('url');
 const multer = require('multer');
-const { DateTime } = require('luxon');
 const textParser = require('../public/scripts/text-parser.js');
 
 const spoilerMarker = "**spoiler**";;
@@ -26,48 +25,19 @@ const upload = multer();
 const { initializeDatabase } = require('./database/init');
 const scheduler = require('./services/scheduler');
 const adminRouter = require('./routes/admin');
+const authRouter = require('./routes/auth');
+const accountsRouter = require('./routes/accounts');
+const importRouter = require('./routes/import');
+const analyticsRouter = require('./routes/analytics');
+const commentsRouter = require('./routes/comments');
+const { AccountsModel, AccountCookiesModel, AdminSessionsModel } = require('./database/accountModels');
 
-const DEFAULT_THREADS_QUERY_LIMIT = 10;
-
-const FIELD__ALT_TEXT = 'alt_text';
-const FIELD__APPLICATION = 'application';
-const FIELD__APP_SCOPED_USER_ID = 'user_id';
-const FIELD__CLICKS = 'clicks';
 const FIELD__ERROR_MESSAGE = 'error_message';
-const FIELD__EXPIRES_AT = 'expires_at';
-const FIELD__FOLLOWERS_COUNT = 'followers_count';
-const FIELD__HIDE_STATUS = 'hide_status';
 const FIELD__ID = 'id';
-const FIELD__ISSUED_AT = 'issued_at';
-const FIELD__IS_REPLY = 'is_reply';
-const FIELD__IS_VERIFIED = 'is_verified';
-const FIELD__IS_QUOTE_POST = 'is_quote_post';
-const FIELD__LIKES = 'likes';
-const FIELD__LINK_ATTACHMENT_URL = 'link_attachment_url';
-const FIELD__TOPIC_TAG = 'topic_tag';
-const FIELD__MEDIA_TYPE = 'media_type';
-const FIELD__MEDIA_URL = 'media_url';
-const FIELD__NAME = 'name';
-const FIELD__GIF_URL = 'gif_url';
-const FIELD__PERMALINK = 'permalink';
-const FIELD__POLL_ATTACHMENT = 'poll_attachment';
-const FIELD__REPLIES = 'replies';
-const FIELD__REPOSTS = 'reposts';
-const FIELD__QUOTED_POST = 'quoted_post';
-const FIELD__QUOTES = 'quotes';
-const FIELD__REPLY_AUDIENCE = 'reply_audience';
-const FIELD__REPOSTED_POST = 'reposted_post';
-const FIELD__SCOPES = 'scopes';
-const FIELD__SHARES = 'shares';
 const FIELD__STATUS = 'status';
-const FIELD__TEXT = 'text';
-const FIELD__TIMESTAMP = 'timestamp';
 const FIELD__THREADS_BIOGRAPHY = 'threads_biography';
 const FIELD__THREADS_PROFILE_PICTURE_URL = 'threads_profile_picture_url';
 const FIELD__USERNAME = 'username';
-const FIELD__VIEWS = 'views';
-const FIELD_IS_SPOILER_MEDIA = 'is_spoiler_media';
-const FIELD_TEXT_ENTITES = 'text_entities';
 
 const MEDIA_TYPE__CAROUSEL = 'CAROUSEL';
 const MEDIA_TYPE__IMAGE = 'IMAGE';
@@ -76,34 +46,18 @@ const MEDIA_TYPE__VIDEO = 'VIDEO';
 
 const PARAMS__ACCESS_TOKEN = 'access_token';
 const PARAMS__AUTO_PUBLISH_TEXT = 'auto_publish_text';
-const PARAMS__ALT_TEXT = 'alt_text';
 const PARAMS__CLIENT_ID = 'client_id';
-const PARAMS__CONFIG = 'config';
-const PARAMS__DELETE_CONFIG = 'delete_config';
-const PARAMS__DELETE_QUOTA_USAGE = 'delete_quota_usage';
 const PARAMS__FIELDS = 'fields';
-const PARAMS__HIDE = 'hide';
-const PARAMS__INPUT_TOKEN = 'input_token';
 const PARAMS__LINK_ATTACHMENT = 'link_attachment';
-const PARAMS__LOCATION_SEARCH_CONFIG = 'location_search_config';
-const PARAMS__LOCATION_SEARCH_QUOTA_USAGE = 'location_search_quota_usage';
-const PARAMS__METRIC = 'metric';
 const PARAMS__POLL_ATTACHMENT = 'poll_attachment';
-const PARAMS__Q = 'q';
-const PARAMS__QUOTA_USAGE = 'quota_usage';
 const PARAMS__QUOTE_POST_ID = 'quote_post_id';
 const PARAMS__REDIRECT_URI = 'redirect_uri';
-const PARAMS__REPLY_CONFIG = 'reply_config';
 const PARAMS__REPLY_CONTROL = 'reply_control';
-const PARAMS__REPLY_QUOTA_USAGE = 'reply_quota_usage';
 const PARAMS__REPLY_TO_ID = 'reply_to_id';
 const PARAMS__RESPONSE_TYPE = 'response_type';
-const PARAMS__RETURN_URL = 'return_url';
 const PARAMS__SCOPE = 'scope';
-const PARAMS__SEARCH_TYPE = 'search_type';
 const PARAMS__TEXT = 'text';
 const PARAMS__TOPIC_TAG = 'topic_tag';
-const PARAMS__USERNAME = 'username';
 const PARAMS_IS_SPOILER_MEDIA = 'is_spoiler_media';
 const PARAMS_TEXT_ENTITES = 'text_entities';
 
@@ -167,7 +121,13 @@ app.use(
     })
 );
 
+// Auth routes must be mounted BEFORE admin routes to avoid redirect loop
+app.use('/admin/auth', authRouter);
 app.use('/admin', adminRouter);
+app.use('/admin/accounts', accountsRouter);
+app.use('/admin/import', importRouter);
+app.use('/admin/analytics', analyticsRouter);
+app.use('/admin/api/comments', commentsRouter);
 
 // Middleware to ensure the user is logged in
 const loggedInUserChecker = (req, res, next) => {
@@ -186,25 +146,19 @@ const loggedInUserChecker = (req, res, next) => {
     }
 };
 
-app.get('/', async (req, res) => {
-    initializeDatabase();
-
-    const accessToken = req.session.access_token || req.signedCookies.access_token;
-
-    if (accessToken && !req.session.access_token) {
-        req.session.access_token = accessToken;
-        scheduler.initialize(accessToken);
-        res.redirect('/admin/dashboard');
-    } else if (!req.session.access_token && initial_access_token && initial_user_id) {
-        useInitialAuthenticationValues(req);
-        scheduler.initialize(req.session.access_token);
-        res.redirect('/admin/dashboard');
-    } else {
-        res.render('index', {
-            title: 'Index',
-            returnUrl: req.query[PARAMS__RETURN_URL],
-        });
+app.get('/', (req, res) => {
+    // Check if admin user is logged in
+    const sessionToken = req.signedCookies.admin_session;
+    if (sessionToken) {
+        const { AdminSessionsModel } = require('./database/accountModels');
+        const session = AdminSessionsModel.findByToken(sessionToken);
+        if (session && session.expires_at > Math.floor(Date.now() / 1000)) {
+            return res.redirect('/admin/platforms');
+        }
     }
+
+    // Not logged in, redirect to admin login
+    res.redirect('/admin/auth/login');
 });
 
 // Login route using OAuth
@@ -271,6 +225,74 @@ app.get('/callback', async (req, res) => {
             console.error(e?.response?.data?.error?.message ?? e.message);
         }
 
+        // Fetch user details and save account to database
+        try {
+            const getUserDetailsUrl = buildGraphAPIURL(
+                'me',
+                {
+                    [PARAMS__FIELDS]: [
+                        FIELD__ID,
+                        FIELD__USERNAME,
+                        FIELD__THREADS_PROFILE_PICTURE_URL,
+                        FIELD__THREADS_BIOGRAPHY,
+                    ].join(','),
+                },
+                req.session.access_token
+            );
+
+            const userResponse = await axios.get(getUserDetailsUrl, {
+                httpsAgent: agent,
+            });
+
+            const threadsUserId = userResponse.data.id;
+            const username = userResponse.data.username;
+
+            // Check if account already exists
+            let account = AccountsModel.findByThreadsUserId(threadsUserId);
+
+            // Get logged-in admin user
+            const sessionToken = req.signedCookies.admin_session;
+            let adminUserId = null;
+            if (sessionToken) {
+                const session = AdminSessionsModel.findByToken(sessionToken);
+                if (session && session.expires_at > Math.floor(Date.now() / 1000)) {
+                    adminUserId = session.admin_user_id;
+                }
+            }
+
+            if (account) {
+                // Update existing account with new token and admin user
+                account = AccountsModel.update(account.id, {
+                    access_token: req.session.access_token,
+                    username,
+                    threads_profile_picture_url: userResponse.data.threads_profile_picture_url,
+                    threads_biography: userResponse.data.threads_biography,
+                    admin_user_id: adminUserId, // Link to admin user
+                });
+            } else {
+                // Create new account linked to admin user
+                account = AccountsModel.create({
+                    threads_user_id: threadsUserId,
+                    username,
+                    threads_profile_picture_url: userResponse.data.threads_profile_picture_url,
+                    threads_biography: userResponse.data.threads_biography,
+                    access_token: req.session.access_token,
+                    admin_user_id: adminUserId, // Link to admin user
+                });
+            }
+
+            // Set as current account
+            res.cookie('current_account_id', account.id, {
+                signed: true,
+                maxAge: 365 * 24 * 60 * 60 * 1000,
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'lax',
+            });
+        } catch (userError) {
+            console.error('Error fetching user details:', userError?.response?.data?.error?.message ?? userError.message);
+        }
+
         // Save access token to signed cookie (expires in 60 days)
         res.cookie('access_token', req.session.access_token, {
             signed: true,
@@ -281,7 +303,7 @@ app.get('/callback', async (req, res) => {
         });
 
         scheduler.initialize(req.session.access_token);
-        res.redirect('/admin/dashboard');
+        res.redirect('/admin/platforms');
     } catch (err) {
         console.error(err?.response?.data);
         res.render('index', {
@@ -290,185 +312,6 @@ app.get('/callback', async (req, res) => {
     }
 });
 
-app.get('/account', loggedInUserChecker, async (req, res) => {
-    const getUserDetailsUrl = buildGraphAPIURL(
-        'me',
-        {
-            [PARAMS__FIELDS]: [
-                FIELD__USERNAME,
-                FIELD__NAME,
-                FIELD__THREADS_PROFILE_PICTURE_URL,
-                FIELD__THREADS_BIOGRAPHY,
-                FIELD__IS_VERIFIED,
-            ].join(','),
-        },
-        req.session.access_token
-    );
-
-    let userDetails = {};
-    try {
-        const response = await axios.get(getUserDetailsUrl, {
-            httpsAgent: agent,
-        });
-        userDetails = response.data;
-
-        // This value is not currently used but it may come handy in the future
-        if (!req.session.user_id) req.session.user_id = response.data.id;
-
-        userDetails.user_profile_url = `https://www.threads.net/@${userDetails.username}`;
-    } catch (e) {
-        console.error(e);
-    }
-
-    res.render('account', {
-        title: 'Account',
-        ...userDetails,
-    });
-});
-
-app.get('/userInsights', loggedInUserChecker, async (req, res) => {
-    const { since, until } = req.query;
-
-    const params = {
-        [PARAMS__METRIC]: [
-            FIELD__VIEWS,
-            FIELD__LIKES,
-            FIELD__REPLIES,
-            FIELD__QUOTES,
-            FIELD__REPOSTS,
-            FIELD__CLICKS,
-            FIELD__FOLLOWERS_COUNT,
-        ].join(','),
-    };
-    if (since) {
-        params.since = since;
-    }
-    if (until) {
-        params.until = until;
-    }
-
-    const queryThreadUrl = buildGraphAPIURL(
-        `me/threads_insights`,
-        params,
-        req.session.access_token
-    );
-
-    let data = [];
-    try {
-        const queryResponse = await axios.get(queryThreadUrl, {
-            httpsAgent: agent,
-        });
-        data = queryResponse.data;
-    } catch (e) {
-        console.error(e?.response?.data?.error?.message ?? e.message);
-    }
-
-    const metrics = data?.data ?? [];
-    for (const index in metrics) {
-        const metric = metrics[index];
-        if (metric.name === FIELD__VIEWS) {
-            // The "views" metric returns as a value for user insights
-            getInsightsValue(metrics, index);
-        } else if (metric.name === FIELD__CLICKS) {
-            getInsightsValueForClicks(metrics, index);
-        } else {
-            // All other metrics return as a total value
-            getInsightsTotalValue(metrics, index);
-        }
-    }
-
-    res.render('user_insights', {
-        title: 'User Insights',
-        metrics,
-        since,
-        until,
-    });
-});
-
-app.get('/publishingLimit', loggedInUserChecker, async (req, res) => {
-    const params = {
-        [PARAMS__FIELDS]: [
-            PARAMS__QUOTA_USAGE,
-            PARAMS__CONFIG,
-            PARAMS__REPLY_QUOTA_USAGE,
-            PARAMS__REPLY_CONFIG,
-            PARAMS__DELETE_QUOTA_USAGE,
-            PARAMS__DELETE_CONFIG,
-            PARAMS__LOCATION_SEARCH_QUOTA_USAGE,
-            PARAMS__LOCATION_SEARCH_CONFIG,
-        ].join(','),
-    };
-
-    const publishingLimitUrl = buildGraphAPIURL(
-        `me/threads_publishing_limit`,
-        params,
-        req.session.access_token
-    );
-
-    let data = [];
-    try {
-        const queryResponse = await axios.get(publishingLimitUrl, {
-            httpsAgent: agent,
-        });
-        data = queryResponse.data;
-    } catch (e) {
-        console.error(e?.response?.data?.error?.message ?? e.message);
-    }
-
-    data = data.data?.[0] ?? {};
-
-    const quotaUsage = data[PARAMS__QUOTA_USAGE];
-    const config = data[PARAMS__CONFIG];
-    const replyQuotaUsage = data[PARAMS__REPLY_QUOTA_USAGE];
-    const replyConfig = data[PARAMS__REPLY_CONFIG];
-    const deleteQuotaUsage = data[PARAMS__DELETE_QUOTA_USAGE];
-    const deleteConfig = data[PARAMS__DELETE_CONFIG];
-    const locationSearchQuotaUsage = data[PARAMS__LOCATION_SEARCH_QUOTA_USAGE];
-    const locationSearchConfig = data[PARAMS__LOCATION_SEARCH_CONFIG];
-
-    res.render('publishing_limit', {
-        title: 'Publishing Limit',
-        quotaUsage,
-        config,
-        replyQuotaUsage,
-        replyConfig,
-        deleteQuotaUsage,
-        deleteConfig,
-        locationSearchQuotaUsage,
-        locationSearchConfig,
-    });
-});
-
-app.get('/upload', loggedInUserChecker, (req, res) => {
-    const { replyToId, quotePostId } = req.query;
-    const title = replyToId === undefined ? 'Upload' : 'Upload (Reply)';
-    res.render('upload', {
-        title,
-        replyToId,
-        quotePostId,
-    });
-});
-
-app.post('/repost', upload.array(), async (req, res) => {
-    const { repostId } = req.body;
-
-    const repostThreadsUrl = buildGraphAPIURL(
-        `${repostId}/repost`,
-        {},
-        req.session.access_token
-    );
-    try {
-        const repostResponse = await axios.post(repostThreadsUrl, {});
-        const containerId = repostResponse.data.id;
-        return res.redirect(`threads/${containerId}`);
-    } catch (e) {
-        console.error(e.message);
-        return res.json({
-            error: true,
-            message: `Error during repost: ${e}`,
-        });
-    }
-});
 
 app.post('/upload', upload.array(), async (req, res) => {
     const {
@@ -692,590 +535,6 @@ app.post('/publish', upload.array(), async (req, res) => {
     }
 });
 
-app.get('/threads/:threadId', loggedInUserChecker, async (req, res) => {
-    const { threadId } = req.params;
-    let data = {};
-    const queryThreadUrl = buildGraphAPIURL(
-        `${threadId}`,
-        {
-            [PARAMS__FIELDS]: [
-                FIELD__TEXT,
-                FIELD__MEDIA_TYPE,
-                FIELD__MEDIA_URL,
-                FIELD__GIF_URL,
-                FIELD__PERMALINK,
-                FIELD__TIMESTAMP,
-                FIELD__IS_REPLY,
-                FIELD__USERNAME,
-                FIELD__REPLY_AUDIENCE,
-                FIELD__ALT_TEXT,
-                FIELD__LINK_ATTACHMENT_URL,
-                FIELD__TOPIC_TAG,
-                FIELD__POLL_ATTACHMENT,
-                FIELD__IS_QUOTE_POST,
-                FIELD__QUOTED_POST,
-                FIELD__REPOSTED_POST,
-                FIELD_IS_SPOILER_MEDIA,
-                FIELD_TEXT_ENTITES,
-            ].join(','),
-        },
-        req.session.access_token
-    );
-
-    try {
-        const queryResponse = await axios.get(queryThreadUrl, {
-            httpsAgent: agent,
-        });
-        const { poll_attachment, ...rest } = queryResponse.data;
-        data = rest;
-
-        if (poll_attachment) {
-            data = {
-                ...data,
-                ...poll_attachment,
-            };
-        }
-    } catch (e) {
-        console.error(e?.response?.data?.error?.message ?? e.message);
-    }
-
-    res.render('thread', {
-        threadId,
-        ...data,
-        title: 'Thread',
-    });
-});
-
-app.get('/threads', loggedInUserChecker, async (req, res) => {
-    const { before, after, limit } = req.query;
-    const params = {
-        [PARAMS__FIELDS]: [
-            FIELD__TEXT,
-            FIELD__MEDIA_TYPE,
-            FIELD__MEDIA_URL,
-            FIELD__PERMALINK,
-            FIELD__TIMESTAMP,
-            FIELD__USERNAME,
-        ].join(','),
-        limit: limit ?? DEFAULT_THREADS_QUERY_LIMIT,
-    };
-    if (before) {
-        params.before = before;
-    }
-    if (after) {
-        params.after = after;
-    }
-
-    let threads = [];
-    let paging = {};
-
-    const queryThreadsUrl = buildGraphAPIURL(
-        `me/threads`,
-        params,
-        req.session.access_token
-    );
-
-    try {
-        const queryResponse = await axios.get(queryThreadsUrl, {
-            httpsAgent: agent,
-        });
-        threads = queryResponse.data.data;
-
-        if (queryResponse.data.paging) {
-            const { next, previous } = queryResponse.data.paging;
-
-            if (next) {
-                paging.nextUrl = getCursorUrlFromGraphApiPagingUrl(req, next);
-            }
-
-            if (previous) {
-                paging.previousUrl = getCursorUrlFromGraphApiPagingUrl(
-                    req,
-                    previous
-                );
-            }
-        }
-    } catch (e) {
-        console.error(e?.response?.data?.error?.message ?? e.message);
-    }
-
-    res.render('threads', {
-        paging,
-        threads,
-        title: 'Threads',
-    });
-});
-
-app.get('/replies', loggedInUserChecker, async (req, res) => {
-    const { before, after, limit } = req.query;
-    const params = {
-        [PARAMS__FIELDS]: [
-            FIELD__TEXT,
-            FIELD__MEDIA_TYPE,
-            FIELD__MEDIA_URL,
-            FIELD__PERMALINK,
-            FIELD__TIMESTAMP,
-            FIELD__USERNAME,
-        ].join(','),
-        limit: limit ?? DEFAULT_THREADS_QUERY_LIMIT,
-    };
-    if (before) {
-        params.before = before;
-    }
-    if (after) {
-        params.after = after;
-    }
-
-    let threads = [];
-    let paging = {};
-
-    const queryRepliesUrl = buildGraphAPIURL(
-        `me/replies`,
-        params,
-        req.session.access_token
-    );
-
-    try {
-        const queryResponse = await axios.get(queryRepliesUrl, {
-            httpsAgent: agent,
-        });
-        threads = queryResponse.data.data;
-
-        if (queryResponse.data.paging) {
-            const { next, previous } = queryResponse.data.paging;
-
-            if (next) {
-                paging.nextUrl = getCursorUrlFromGraphApiPagingUrl(req, next);
-            }
-
-            if (previous) {
-                paging.previousUrl = getCursorUrlFromGraphApiPagingUrl(
-                    req,
-                    previous
-                );
-            }
-        }
-    } catch (e) {
-        console.error(e?.response?.data?.error?.message ?? e.message);
-    }
-
-    res.render('threads', {
-        paging,
-        threads,
-        title: 'My Replies',
-    });
-});
-
-app.get('/threads/:threadId/replies', loggedInUserChecker, (req, res) => {
-    showReplies(req, res, true);
-});
-
-app.get('/threads/:threadId/conversation', loggedInUserChecker, (req, res) => {
-    showReplies(req, res, false);
-});
-
-app.post('/manage_reply/:replyId', upload.array(), async (req, res) => {
-    const { replyId } = req.params;
-    const { hide } = req.query;
-
-    const params = {};
-    if (hide) {
-        params[PARAMS__HIDE] = hide === 'true';
-    }
-
-    const hideReplyUrl = buildGraphAPIURL(
-        `${replyId}/manage_reply`,
-        {},
-        req.session.access_token
-    );
-
-    try {
-        response = await axios.post(hideReplyUrl, params, {
-            httpsAgent: agent,
-        });
-    } catch (e) {
-        console.error(e?.message);
-        return res.status(e?.response?.status ?? 500).json({
-            error: true,
-            message: `Error while hiding reply: ${e}`,
-        });
-    }
-
-    return res.sendStatus(200);
-});
-
-app.get(
-    '/threads/:threadId/insights',
-    loggedInUserChecker,
-    async (req, res) => {
-        const { threadId } = req.params;
-        const { since, until } = req.query;
-
-        const params = {
-            [PARAMS__METRIC]: [
-                FIELD__VIEWS,
-                FIELD__LIKES,
-                FIELD__REPLIES,
-                FIELD__REPOSTS,
-                FIELD__QUOTES,
-                FIELD__SHARES,
-            ].join(','),
-        };
-        if (since) {
-            params.since = since;
-        }
-        if (until) {
-            params.until = until;
-        }
-
-        const queryThreadUrl = buildGraphAPIURL(
-            `${threadId}/insights`,
-            params,
-            req.session.access_token
-        );
-
-        let data = [];
-        try {
-            const queryResponse = await axios.get(queryThreadUrl, {
-                httpsAgent: agent,
-            });
-            data = queryResponse.data;
-        } catch (e) {
-            console.error(e?.response?.data?.error?.message ?? e.message);
-        }
-
-        const metrics = data?.data ?? [];
-        for (const index in metrics) {
-            // All metrics return as a value (rather than total value) for media insights
-            getInsightsValue(metrics, index);
-        }
-
-        res.render('thread_insights', {
-            title: 'Thread Insights',
-            threadId,
-            metrics,
-            since,
-            until,
-        });
-    }
-);
-
-app.get('/mentions', loggedInUserChecker, async (req, res) => {
-    const { before, after, limit } = req.query;
-    const params = {
-        [PARAMS__FIELDS]: [
-            FIELD__USERNAME,
-            FIELD__TEXT,
-            FIELD__MEDIA_TYPE,
-            FIELD__MEDIA_URL,
-            FIELD__PERMALINK,
-            FIELD__TIMESTAMP,
-        ].join(','),
-        limit: limit ?? DEFAULT_THREADS_QUERY_LIMIT,
-    };
-    if (before) {
-        params.before = before;
-    }
-    if (after) {
-        params.after = after;
-    }
-
-    const queryMentionsUrl = buildGraphAPIURL(
-        `me/mentions`,
-        params,
-        req.session.access_token
-    );
-
-    let threads = [];
-    let paging = {};
-
-    try {
-        const queryResponse = await axios.get(queryMentionsUrl, {
-            httpsAgent: agent,
-        });
-        threads = queryResponse.data.data;
-
-        if (queryResponse.data.paging) {
-            const { next, previous } = queryResponse.data.paging;
-
-            if (next) {
-                paging.nextUrl = getCursorUrlFromGraphApiPagingUrl(req, next);
-            }
-
-            if (previous) {
-                paging.previousUrl = getCursorUrlFromGraphApiPagingUrl(
-                    req,
-                    previous
-                );
-            }
-        }
-    } catch (e) {
-        console.error(e?.response?.data?.error?.message ?? e.message);
-    }
-
-    res.render('mentions', {
-        title: 'Mentions',
-        threads,
-        paging,
-    });
-});
-
-app.get('/debug', loggedInUserChecker, async (req, res) => {
-    const params = {
-        [PARAMS__INPUT_TOKEN]: req.session.access_token,
-    };
-
-    const debugAccessTokenUrl = buildGraphAPIURL(
-        `debug_token`,
-        params,
-        req.session.access_token
-    );
-
-    let data = {};
-    try {
-        const response = await axios.get(debugAccessTokenUrl, {
-            httpsAgent: agent,
-        });
-        data = response.data.data;
-    } catch (e) {
-        console.error(e?.response?.data?.error?.message ?? e.message);
-    }
-
-    const applicationName = data[FIELD__APPLICATION];
-    const expiresAt = formatTimestamp(data[FIELD__EXPIRES_AT]);
-    const issuedAt = formatTimestamp(data[FIELD__ISSUED_AT]);
-    const scopes = data[FIELD__SCOPES].join(', ');
-    const appScopedUserId = data[FIELD__APP_SCOPED_USER_ID];
-
-    return res.render('debug', {
-        title: 'Inspect Access Token',
-        applicationName,
-        expiresAt,
-        issuedAt,
-        scopes,
-        appScopedUserId,
-    });
-});
-
-app.get('/keywordSearch', loggedInUserChecker, async (req, res) => {
-    const { keyword, searchType } = req.query;
-
-    if (!keyword) {
-        return res.render('keyword_search', {
-            title: 'Search for Threads',
-        });
-    }
-
-    const params = {
-        [PARAMS__Q]: keyword,
-        [PARAMS__SEARCH_TYPE]: searchType,
-        [PARAMS__FIELDS]: [
-            FIELD__USERNAME,
-            FIELD__ID,
-            FIELD__TIMESTAMP,
-            FIELD__MEDIA_TYPE,
-            FIELD__TEXT,
-            FIELD__PERMALINK,
-            FIELD__MEDIA_URL,
-        ].join(','),
-    };
-
-    const keywordSearchUrl = buildGraphAPIURL(
-        `keyword_search`,
-        params,
-        req.session.access_token
-    );
-
-    let threads = [];
-    let paging = {};
-
-    try {
-        const response = await axios.get(keywordSearchUrl, {
-            httpsAgent: agent,
-        });
-        threads = response.data.data;
-
-        if (response.data.paging) {
-            const { next, previous } = response.data.paging;
-
-            if (next) {
-                paging.nextUrl = getCursorUrlFromGraphApiPagingUrl(req, next);
-            }
-        }
-    } catch (e) {
-        console.error(e?.response?.data?.error?.message ?? e.message);
-    }
-
-    return res.render('keyword_search', {
-        title: 'Search for Threads',
-        threads,
-        paging,
-        resultsTitle: `${searchType} results for '${keyword}'`,
-    });
-});
-
-// Logout route to kill the session
-app.get('/logout', (req, res) => {
-    // Clear the signed cookie
-    res.clearCookie('access_token', {
-        signed: true,
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-    });
-
-    if (req.session) {
-        req.session.destroy((err) => {
-            if (err) {
-                res.render('index', { error: 'Unable to log out' });
-            } else {
-                res.render('index', { response: 'Logout successful!' });
-            }
-        });
-    } else {
-        res.render('index', { response: 'Logout not stored in session' });
-    }
-});
-
-app.get('/oEmbed', async (req, res) => {
-    const { url } = req.query;
-    if (!url) {
-        return res.render('oembed', {
-            title: 'Embed Threads',
-        });
-    }
-
-    const oEmbedUrl = buildGraphAPIURL(
-        `oembed`,
-        {
-            url,
-        },
-        `TH|${APP_ID}|${API_SECRET}`
-    );
-
-    let html = '<p>Unable to embed</p>';
-    try {
-        const response = await axios.get(oEmbedUrl, { httpsAgent: agent });
-        if (response.data?.html) {
-            html = response.data.html;
-        }
-    } catch (e) {
-        console.error(e?.response?.data?.error?.message ?? e.message);
-    }
-
-    return res.render('oembed', {
-        title: 'Embed Threads',
-        html,
-        url,
-    });
-});
-
-app.get('/profileLookup', async (req, res) => {
-    const { username, before, after, limit } = req.query;
-    if (!username) {
-        return res.render('profile_lookup', {
-            title: 'Profile Lookup',
-        });
-    }
-
-    const params = {
-        [PARAMS__USERNAME]: username,
-    };
-
-    const profileLookupUrl = buildGraphAPIURL(
-        `profile_lookup`,
-        params,
-        req.session.access_token
-    );
-
-    let response = {};
-    try {
-        response = await axios.get(profileLookupUrl, { httpsAgent: agent });
-    } catch (e) {
-        console.error(e?.response?.data?.error?.message ?? e.message);
-    }
-
-    const displayName = response.data?.name;
-    const profilePictureUrl = response.data?.profile_picture_url;
-    const isVerified = response.data?.is_verified;
-    const bio = response.data?.biography;
-    const formatCount = (count) =>
-        count ? count.toLocaleString('en-US') : undefined;
-    const followerCount = formatCount(response.data?.follower_count);
-    const likesCount = formatCount(response.data?.likes_count);
-    const quotesCount = formatCount(response.data?.quotes_count);
-    const repliesCount = formatCount(response.data?.replies_count);
-    const repostsCount = formatCount(response.data?.reposts_count);
-    const viewsCount = formatCount(response.data?.views_count);
-
-    const profilePostsParams = {
-        [PARAMS__FIELDS]: [
-            FIELD__TEXT,
-            FIELD__MEDIA_TYPE,
-            FIELD__MEDIA_URL,
-            FIELD__PERMALINK,
-            FIELD__TIMESTAMP,
-        ].join(','),
-        limit: limit ?? DEFAULT_THREADS_QUERY_LIMIT,
-        [PARAMS__USERNAME]: username,
-    };
-    if (before) {
-        profilePostsParams.before = before;
-    }
-    if (after) {
-        profilePostsParams.after = after;
-    }
-
-    let threads = [];
-    let paging = {};
-
-    const queryThreadsUrl = buildGraphAPIURL(
-        `profile_posts`,
-        profilePostsParams,
-        req.session.access_token
-    );
-
-    try {
-        const queryResponse = await axios.get(queryThreadsUrl, {
-            httpsAgent: agent,
-        });
-        threads = queryResponse.data.data;
-
-        if (queryResponse.data.paging) {
-            const { next, previous } = queryResponse.data.paging;
-
-            if (next) {
-                paging.nextUrl = getCursorUrlFromGraphApiPagingUrl(req, next);
-            }
-
-            if (previous) {
-                paging.previousUrl = getCursorUrlFromGraphApiPagingUrl(
-                    req,
-                    previous
-                );
-            }
-        }
-    } catch (e) {
-        console.error(e?.response?.data?.error?.message ?? e.message);
-    }
-
-    return res.render('profile_lookup', {
-        title: 'Profile Lookup for @'.concat(username),
-        username,
-        displayName,
-        profilePictureUrl,
-        isVerified,
-        bio,
-        followerCount,
-        likesCount,
-        quotesCount,
-        repliesCount,
-        repostsCount,
-        viewsCount,
-        paging,
-        threads,
-    });
-});
 
 https
     .createServer(
@@ -1323,41 +582,6 @@ function useInitialAuthenticationValues(req) {
 }
 
 /**
- * @param {{ value?: number, values: { value: number }[] }[]} metrics
- * @param {*} index
- */
-function getInsightsValue(metrics, index) {
-    if (metrics[index]) {
-        metrics[index].value = metrics[index].values?.[0]?.value;
-    }
-}
-
-/**
- * @param {{ value?: number, total_value: { value: number } }[]} metrics
- * @param {number} index
- */
-function getInsightsTotalValue(metrics, index) {
-    if (metrics[index]) {
-        metrics[index].value = metrics[index].total_value?.value;
-    }
-}
-
-/**
- * @param {{ value?: number, link_total_values: { value: number }[] }[]} metrics
- * @param {number} index
- */
-function getInsightsValueForClicks(metrics, index) {
-    if (metrics[index] && metrics[index].link_total_values) {
-        metrics[index].value = metrics[index]?.link_total_values?.reduce(
-            (sum, { value }) => sum + value,
-            0
-        );
-    } else {
-        metrics[index].value = 0;
-    }
-}
-
-/**
  * @param {object} target
  * @param {string} attachmentType
  * @param {string} url
@@ -1372,117 +596,4 @@ function addAttachmentFields(target, attachmentType, url, altText) {
         target.video_url = url;
         target.alt_text = altText;
     }
-}
-
-/**
- * @param {int} timestamp
- */
-function formatTimestamp(timestamp) {
-    const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    return DateTime.fromSeconds(timestamp, {
-        zone: userTimeZone,
-    }).toLocaleString(DateTime.DATETIME_FULL_WITH_SECONDS);
-}
-
-/**
- * @param {URL} sourceUrl
- * @param {URL} destinationUrl
- * @param {string} paramName
- */
-function setUrlParamIfPresent(sourceUrl, destinationUrl, paramName) {
-    const paramValue = sourceUrl.searchParams.get(paramName);
-    if (paramValue) {
-        destinationUrl.searchParams.set(paramName, paramValue);
-    }
-}
-
-/**
- * @param {Request} req
- * @param {string} graphApiPagingUrl
- */
-function getCursorUrlFromGraphApiPagingUrl(req, graphApiPagingUrl) {
-    const graphUrl = new URL(graphApiPagingUrl);
-
-    const cursorUrl = new URL(
-        req.protocol + '://' + req.get('host') + req.originalUrl
-    );
-    cursorUrl.search = '';
-
-    setUrlParamIfPresent(graphUrl, cursorUrl, 'limit');
-    setUrlParamIfPresent(graphUrl, cursorUrl, 'before');
-    setUrlParamIfPresent(graphUrl, cursorUrl, 'after');
-    setUrlParamIfPresent(graphUrl, cursorUrl, 'username');
-
-    return cursorUrl.href;
-}
-
-/**
- * @param {Request} req
- * @param {Response} res
- * @param {boolean} [isTopLevel]
- */
-async function showReplies(req, res, isTopLevel) {
-    const { threadId } = req.params;
-    const { username, before, after, limit } = req.query;
-
-    const params = {
-        [PARAMS__FIELDS]: [
-            FIELD__TEXT,
-            FIELD__MEDIA_TYPE,
-            FIELD__MEDIA_URL,
-            FIELD__PERMALINK,
-            FIELD__TIMESTAMP,
-            FIELD__USERNAME,
-            FIELD__HIDE_STATUS,
-            FIELD__ALT_TEXT,
-        ].join(','),
-        limit: limit ?? DEFAULT_THREADS_QUERY_LIMIT,
-    };
-    if (before) {
-        params.before = before;
-    }
-    if (after) {
-        params.after = after;
-    }
-
-    let replies = [];
-    let paging = {};
-
-    const repliesOrConversation = isTopLevel ? 'replies' : 'conversation';
-    const queryThreadsUrl = buildGraphAPIURL(
-        `${threadId}/${repliesOrConversation}`,
-        params,
-        req.session.access_token
-    );
-
-    try {
-        const queryResponse = await axios.get(queryThreadsUrl, {
-            httpsAgent: agent,
-        });
-        replies = queryResponse.data.data;
-
-        if (queryResponse.data.paging) {
-            const { next, previous } = queryResponse.data.paging;
-
-            if (next)
-                paging.nextUrl = getCursorUrlFromGraphApiPagingUrl(req, next);
-
-            if (previous)
-                paging.previousUrl = getCursorUrlFromGraphApiPagingUrl(
-                    req,
-                    previous
-                );
-        }
-    } catch (e) {
-        console.error(e?.response?.data?.error?.message ?? e.message);
-    }
-
-    res.render(isTopLevel ? 'thread_replies' : 'thread_conversation', {
-        threadId,
-        username,
-        paging,
-        replies,
-        manage: isTopLevel ? true : false,
-        title: 'Replies',
-    });
 }

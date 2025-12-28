@@ -7,48 +7,57 @@ block content
 
     .card
         .card-header
-            h2.card-title Posts
+            .header-left
+                h2.card-title Posts
+                .bulk-actions(style='display:none')
+                    button.btn.btn-sm.btn-danger(type='button', onclick='bulkDeleteSelected()') Delete Selected
+                    span.selected-count(style='margin-left: 10px')
             a.btn.btn-primary(href='/admin/create') Create New Post
         .card-body
             if posts.length > 0
-                table.table
-                    thead
-                        tr
-                            th Text
-                            th Status
-                            th Scheduled For
-                            th Media Type
-                            th Actions
-                    tbody
-                        each post in posts
+                .table-wrapper
+                    table.table
+                        thead
                             tr
-                                td
-                                    if post.text
-                                        = post.text.substring(0, 60) + (post.text.length > 60 ? '...' : '')
-                                    else
-                                        em No text
-                                td
-                                    span.badge(class='badge-' + post.status)= post.status
-                                td
-                                    if post.scheduled_for
-                                        - const scheduledDate = new Date(post.scheduled_for * 1000)
-                                        = scheduledDate.toLocaleString()
-                                        if post.status === 'scheduled' && scheduledDate < new Date()
-                                            br
-                                            small.text-danger Due now
-                                    else
-                                        em Not scheduled
-                                td
-                                    = post.media_type || 'TEXT'
-                                td
-                                    .action-buttons
-                                        if post.status === 'scheduled'
-                                            button.btn.btn-sm.btn-success(type='button', onclick='publishNow(' + post.id + ')') Publish Now
-                                        a.btn.btn-sm.btn-secondary(href='/admin/scheduled/' + post.id + '/edit') Edit
-                                        button.btn.btn-sm.btn-danger(type='button', onclick='deletePost(' + post.id + ')') Delete
-                                        if post.error_message
-                                            br
-                                            small.text-danger(title=post.error_message) Failed
+                                th(width='40')
+                                    input(type='checkbox', id='selectAll', onchange='toggleSelectAll()')
+                                th Text
+                                th Status
+                                th Scheduled For
+                                th Media Type
+                                th Actions
+                        tbody
+                            each post in posts
+                                tr
+                                    td
+                                        input.post-checkbox(type='checkbox', value=post.id, onchange='updateBulkActions()')
+                                    td
+                                        if post.text
+                                            = post.text.substring(0, 60) + (post.text.length > 60 ? '...' : '')
+                                        else
+                                            em No text
+                                    td
+                                        span.badge(class='badge-' + post.status)= post.status
+                                    td
+                                        if post.scheduled_for
+                                            - const scheduledDate = new Date(post.scheduled_for * 1000)
+                                            = scheduledDate.toLocaleString()
+                                            if post.status === 'scheduled' && scheduledDate < new Date()
+                                                br
+                                                small.text-danger Due now
+                                        else
+                                            em Not scheduled
+                                    td
+                                        = post.media_type || 'TEXT'
+                                    td
+                                        .action-buttons
+                                            if post.status === 'scheduled'
+                                                button.btn.btn-sm.btn-success(type='button', onclick='publishNow(' + post.id + ')') Publish Now
+                                            a.btn.btn-sm.btn-secondary(href='/admin/scheduled/' + post.id + '/edit') Edit
+                                            button.btn.btn-sm.btn-danger(type='button', onclick='deletePost(' + post.id + ')') Delete
+                                            if post.error_message
+                                                br
+                                                small.text-danger(title=post.error_message) Failed
             else
                 .empty-state
                     .empty-state-icon ⏰
@@ -59,6 +68,62 @@ block content
 
 block scripts
     script.
+        // Toggle select all checkboxes
+        function toggleSelectAll() {
+            const selectAll = document.getElementById('selectAll');
+            const checkboxes = document.querySelectorAll('.post-checkbox');
+            checkboxes.forEach(cb => cb.checked = selectAll.checked);
+            updateBulkActions();
+        }
+
+        // Update bulk actions visibility
+        function updateBulkActions() {
+            const checkboxes = document.querySelectorAll('.post-checkbox:checked');
+            const bulkActions = document.querySelector('.bulk-actions');
+            const selectedCount = document.querySelector('.selected-count');
+
+            if (checkboxes.length > 0) {
+                bulkActions.style.display = 'block';
+                selectedCount.textContent = checkboxes.length + ' selected';
+            } else {
+                bulkActions.style.display = 'none';
+                document.getElementById('selectAll').checked = false;
+            }
+        }
+
+        // Bulk delete selected posts
+        async function bulkDeleteSelected() {
+            const checkboxes = document.querySelectorAll('.post-checkbox:checked');
+            const ids = Array.from(checkboxes).map(cb => parseInt(cb.value));
+
+            if (ids.length === 0) {
+                return;
+            }
+
+            if (!confirm(`Are you sure you want to delete ${ids.length} post${ids.length > 1 ? 's' : ''}?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/admin/api/scheduled/bulk-delete', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ids }),
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showToast(data.message, 'success');
+                    setTimeout(() => window.location.reload(), 1000);
+                } else {
+                    showToast(data.message || 'Failed to delete posts', 'error');
+                }
+            } catch (error) {
+                showToast('Error deleting posts: ' + error.message, 'error');
+            }
+        }
+
         async function deletePost(postId) {
             if (!confirm('Are you sure you want to delete this post?')) {
                 return;
@@ -70,12 +135,13 @@ block scripts
                 });
 
                 if (response.ok) {
-                    window.location.reload();
+                    showToast('Post deleted successfully', 'success');
+                    setTimeout(() => window.location.reload(), 500);
                 } else {
-                    alert('Failed to delete post');
+                    showToast('Failed to delete post', 'error');
                 }
             } catch (error) {
-                alert('Error deleting post: ' + error.message);
+                showToast('Error deleting post: ' + error.message, 'error');
             }
         }
 
@@ -92,12 +158,32 @@ block scripts
                 const data = await response.json();
 
                 if (data.success) {
-                    alert('Post published successfully!');
-                    window.location.reload();
+                    showToast('Post published successfully!', 'success');
+                    setTimeout(() => window.location.reload(), 1000);
                 } else {
-                    alert('Failed to publish post: ' + data.message);
+                    showToast('Failed to publish post: ' + data.message, 'error');
                 }
             } catch (error) {
-                alert('Error publishing post: ' + error.message);
+                showToast('Error publishing post: ' + error.message, 'error');
             }
+        }
+
+        // Toast notification function
+        function showToast(message, type = 'success') {
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.textContent = message;
+
+            document.body.appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.add('show');
+            }, 10);
+
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => {
+                    toast.remove();
+                }, 300);
+            }, 3000);
         }

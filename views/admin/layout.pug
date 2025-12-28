@@ -2,14 +2,31 @@ doctype html
 html
   head
     title Threads Admin Panel - #{title}
-    link(rel='stylesheet' href='/css/style.css')
-    link(rel='stylesheet' href='/css/admin/admin.css')
+    link(rel='stylesheet' href='/css/admin/premium.css')
     meta(name='viewport' content='width=device-width, initial-scale=1.0')
   body
     aside.sidebar
       .sidebar-header
         h2 Threads Admin
+
+      if currentAccount
+        .account-switcher
+          .current-account
+            if currentAccount.threads_profile_picture_url
+              img.account-avatar(src=currentAccount.threads_profile_picture_url, alt=currentAccount.username)
+            else
+              .account-avatar-placeholder= currentAccount.username.charAt(0).toUpperCase()
+            .account-info
+              .account-username= currentAccount.username
+              .account-status Online
+          .account-dropdown
+            a.dropdown-item(href='/admin/accounts') Manage Accounts
+
       ul.sidebar-nav
+        li
+          a(href='/admin/platforms' class=currentPage === 'platforms' ? 'active' : '')
+            span.icon 🔗
+            | Platforms
         li
           a(href='/admin/dashboard' class=currentPage === 'dashboard' ? 'active' : '')
             span.icon 📊
@@ -31,11 +48,19 @@ html
             span.icon 🖼️
             | Media Library
         li
-          a(href='/account' class=currentPage === 'account' ? 'active' : '')
-            span.icon 👤
-            | My Account
+          a(href='/admin/accounts' class=currentPage === 'accounts' ? 'active' : '')
+            span.icon 👥
+            | Accounts
         li
-          a(href='/logout')
+          a(href='/admin/import' class=currentPage === 'import' ? 'active' : '')
+            span.icon 📥
+            | Import Posts
+        li
+          a(href='/admin/analytics' class=currentPage === 'analytics' ? 'active' : '')
+            span.icon 📊
+            | Analytics
+        li
+          a(href='/admin/auth/logout')
             span.icon 🚪
             | Logout
 

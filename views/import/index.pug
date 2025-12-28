@@ -1,0 +1,311 @@
+extends ../admin/layout
+
+block content
+    .header
+        h1 Bulk Import Posts
+        p Import multiple posts from CSV or JSON files
+
+    .card
+        .card-body
+            h3 Upload File
+            p Select a CSV or JSON file containing posts to import.
+
+            form#uploadForm(method='POST', enctype='multipart/form-data')
+                .form-group
+                    label.form-label(for='fileInput') Select File (CSV/JSON)
+                    input.form-control#fileInput(
+                        type='file',
+                        accept='.csv,.json',
+                        required
+                    )
+
+                .form-group
+                    .file-format-guide
+                        h4 Format Guide
+                        .format-tabs
+                            button.tab-btn.active(type='button', data-tab='csv') CSV Format
+                            button.tab-btn(type='button', data-tab='json') JSON Format
+
+                        .format-content#csv-format
+                            p
+                                strong CSV columns:
+                            ul
+                                li text (required) - Post text content
+                                li media_type - TEXT, IMAGE, VIDEO, or CAROUSEL
+                                li media_url - URL for image/video (required for IMAGE/VIDEO)
+                                alt_text - Alt text for media
+                                li schedule_date - Date in YYYY-MM-DD format
+                                li schedule_time - Time in HH:MM format
+                                li reply_control - mentioned_only, followers_only, or empty
+                                li topic_tag - Topic tag for the post
+                                li link_attachment - URL to attach
+
+                            p
+                                strong Example CSV:
+                            pre.
+                                text,media_type,media_url,schedule_date,schedule_time,topic_tag
+                                "Hello World!",TEXT,,"2025-01-15","10:00",tech
+                                "Check this out",IMAGE,https://example.com/image.jpg,"2025-01-16","14:00",travel
+
+                        .format-content#json-format(style='display:none')
+                            p
+                                strong JSON array of objects:
+                            pre.
+                                [
+                                    {
+                                        "text": "Post text",
+                                        "media_type": "IMAGE",
+                                        "media_url": "https://example.com/image.jpg",
+                                        "schedule_date": "2025-01-15",
+                                        "schedule_time": "10:00",
+                                        "reply_control": "mentioned_only",
+                                        "topic_tag": "tech"
+                                    }
+                                ]
+
+                            p
+                                strong Required fields:
+                            ul
+                                li text (required)
+                            p
+                                strong Optional fields:
+                            ul
+                                li media_type (default: TEXT)
+                                li media_url (required for IMAGE/VIDEO)
+                                li alt_text
+                                li schedule_date and schedule_time
+                                li reply_control
+                                li topic_tag
+                                li link_attachment
+
+                button.btn.btn-primary(type='submit') Validate File
+
+    #validationResult(style='display:none')
+        .card
+            .card-header
+                h3 Validation Results
+            .card-body
+                .validation-stats
+                    .stat-item
+                        .stat-label Total Posts
+                        .stat-value#totalPosts 0
+                    .stat-item
+                        .stat-label Valid
+                        .stat-value#validPosts 0
+                    .stat-item
+                        .stat-label Errors
+                        .stat-value#errorPosts 0
+
+                if validationError
+                    .alert.alert-error
+                        span= validationError
+
+                #previewSection(style='display:none')
+                    h4 Preview (First #{MAX_IMPORT_POSTS || 100} posts)
+                    #limitWarning.alert.alert-warning(style='display:none')
+                    span Only the first #{MAX_IMPORT_POSTS || 100} posts will be imported.
+                    .posts-preview
+
+                #errorsSection(style='display:none')
+                    h4 Errors
+                    .errors-list
+
+                .action-buttons
+                    button.btn.btn-secondary(type='button', onclick='resetForm()') Upload Another File
+                    button.btn.btn-success(type='button', onclick='executeImport()') Import Posts
+
+    #importProgress(style='display:none')
+        .card
+            .card-body
+                h3 Importing Posts...
+                .progress-bar
+                    .progress-fill#progressFill(style='width: 0%')
+                .progress-status#progressStatus Starting import...
+
+block scripts
+    script.
+        let validatedPosts = [];
+        let validationErrors = [];
+
+        // Tab switching
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.format-content').forEach(c => c.style.display = 'none');
+                btn.classList.add('active');
+                document.getElementById(btn.dataset.tab + '-format').style.display = 'block';
+            });
+        });
+
+        // Form submission
+        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const formData = new FormData();
+            const file = document.getElementById('fileInput').files[0];
+
+            if (!file) {
+                showToast('Please select a file', 'error');
+                return;
+            }
+
+            formData.append('file', file);
+
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Validating...';
+
+            try {
+                const response = await fetch('/admin/import/api/validate', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showValidationResults(data.validation);
+                } else {
+                    showToast(data.message || 'Validation failed', 'error');
+                }
+            } catch (error) {
+                showToast('Error: ' + error.message, 'error');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Validate File';
+            }
+        });
+
+        function showValidationResults(validation) {
+            document.getElementById('uploadForm').parentElement.style.display = 'none';
+            document.getElementById('validationResult').style.display = 'block';
+
+            document.getElementById('totalPosts').textContent = validation.total;
+            document.getElementById('validPosts').textContent = validation.valid;
+            document.getElementById('errorPosts').textContent = validation.errors;
+
+            validatedPosts = validation.posts || [];
+            validationErrors = validation.errorDetails || [];
+
+            // Show limit warning if posts were truncated
+            if (validation.truncated) {
+                document.getElementById('limitWarning').style.display = 'block';
+            }
+
+            // Show preview
+            if (validatedPosts.length > 0) {
+                document.getElementById('previewSection').style.display = 'block';
+                const previewHtml = validatedPosts.map(post => `
+                    <div class="preview-post">
+                        <p><strong>Text:</strong> ${post.text || '(empty)'}</p>
+                        <p><strong>Type:</strong> ${post.media_type}</p>
+                        ${post.scheduled_for ? `<p><strong>Scheduled:</strong> ${new Date(post.scheduled_for * 1000).toLocaleString()}</p>` : ''}
+                    </div>
+                `).join('');
+                document.querySelector('.posts-preview').innerHTML = previewHtml;
+            }
+
+            // Show errors
+            if (validationErrors.length > 0) {
+                document.getElementById('errorsSection').style.display = 'block';
+                const errorsHtml = validationErrors.map(err => `
+                    <div class="error-item">
+                        <strong>Line ${err.line}:</strong> ${err.message}
+                    </div>
+                `).join('');
+                document.querySelector('.errors-list').innerHTML = errorsHtml;
+            }
+        }
+
+        async function executeImport() {
+            if (validatedPosts.length === 0) {
+                showToast('No valid posts to import', 'error');
+                return;
+            }
+
+            document.getElementById('validationResult').style.display = 'none';
+            document.getElementById('importProgress').style.display = 'block';
+
+            try {
+                const response = await fetch('/admin/import/api/execute', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ posts: validatedPosts }),
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showImportProgress(data.importId);
+                } else {
+                    showToast(data.message || 'Import failed', 'error');
+                    resetForm();
+                }
+            } catch (error) {
+                showToast('Error: ' + error.message, 'error');
+                resetForm();
+            }
+        }
+
+        function showImportProgress(importId) {
+            const progressFill = document.getElementById('progressFill');
+            const progressStatus = document.getElementById('progressStatus');
+            let progress = 0;
+
+            const interval = setInterval(async () => {
+                try {
+                    const response = await fetch(`/admin/import/api/${importId}/status`);
+                    const data = await response.json();
+
+                    if (data.success) {
+                        progress = Math.round((data.success + data.errors) / data.total * 100);
+                        progressFill.style.width = progress + '%';
+                        progressStatus.textContent = `Importing: ${data.success}/${data.total} posts`;
+
+                        if (data.status === 'completed') {
+                            clearInterval(interval);
+                            progressFill.style.width = '100%';
+                            progressStatus.textContent = `Completed! ${data.success} posts imported, ${data.errors} errors`;
+
+                            showToast(`Import completed! ${data.success} posts imported successfully.`, 'success');
+
+                            setTimeout(() => {
+                                window.location.href = '/admin/scheduled';
+                            }, 2000);
+                        }
+                    }
+                } catch (error) {
+                    clearInterval(interval);
+                    showToast('Error checking import status', 'error');
+                }
+            }, 1000);
+        }
+
+        function resetForm() {
+            document.getElementById('uploadForm').reset();
+            document.getElementById('uploadForm').parentElement.style.display = 'block';
+            document.getElementById('validationResult').style.display = 'none';
+            document.getElementById('importProgress').style.display = 'none';
+            validatedPosts = [];
+            validationErrors = [];
+        }
+
+        // Toast notification function
+        function showToast(message, type = 'success') {
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.textContent = message;
+
+            document.body.appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.add('show');
+            }, 10);
+
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => {
+                    toast.remove();
+                }, 300);
+            }, 3000);
+        }

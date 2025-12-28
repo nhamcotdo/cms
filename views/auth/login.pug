@@ -1,0 +1,51 @@
+doctype html
+html
+  head
+    title Login - Threads Admin
+    link(rel='stylesheet' href='/css/admin/premium-auth.css')
+    meta(name='viewport' content='width=device-width, initial-scale=1.0')
+  body
+    .auth-container
+      .auth-card
+        .auth-header
+          h1 Threads Admin
+          p Sign in to manage your Threads posts
+
+        if error
+          .alert.alert-error
+            span= error
+
+        form(method='POST', action='/admin/auth/login')
+          .form-group
+            label.form-label(for='username') Username or Email
+            input.form-control#username(
+              type='text',
+              name='username',
+              placeholder='Enter your username or email',
+              required,
+              autofocus
+            )
+
+          .form-group
+            label.form-label(for='password') Password
+            input.form-control#password(
+              type='password',
+              name='password',
+              placeholder='Enter your password',
+              required
+            )
+
+          .form-group
+            label.form-checkbox
+              input.form-check-input(type='checkbox', name='remember')
+              span Remember me for 30 days
+
+          button.btn.btn-primary.btn-full(type='submit') Sign In
+
+        .auth-footer
+          p Don't have an account?
+            a(href='/admin/auth/register') Register here
+
+    script.
+      // Auto-focus on username field
+      document.getElementById('username').focus();
