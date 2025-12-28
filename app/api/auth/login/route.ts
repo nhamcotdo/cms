@@ -1,38 +1,55 @@
+/**
+ * Login API Route
+ * Handles user authentication
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
+import { authenticateUser, createSession, setSessionCookie } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
   try {
-    const formData = await request.formData();
-    const username = formData.get('username') as string;
-    const password = formData.get('password') as string;
+    const body = await request.json();
+    const { username, password, remember } = body;
 
-    // TODO: Implement actual authentication with database
-    // For now, basic validation
     if (!username || !password) {
-      return NextResponse.redirect(
-        new URL('/login?error=missing', request.url)
+      return NextResponse.json(
+        { success: false, error: 'Please provide username and password' },
+        { status: 400 }
       );
     }
 
-    // TODO: Verify credentials against database
-    // TODO: Create session token
-    // TODO: Set secure cookie
+    // Authenticate user
+    const result = await authenticateUser(username, password, remember);
 
-    // Temporary redirect to dashboard
-    const cookieStore = await cookies();
-    cookieStore.set('admin_session', 'temp-session-token', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 7, // 1 week
+    if (!result.success) {
+      return NextResponse.json(
+        { success: false, error: result.error },
+        { status: 401 }
+      );
+    }
+
+    // Create session
+    const session = await createSession(result.user!.id, remember);
+
+    if (!session) {
+      return NextResponse.json(
+        { success: false, error: 'Failed to create session' },
+        { status: 500 }
+      );
+    }
+
+    // Set session cookie
+    await setSessionCookie(session.session_token);
+
+    return NextResponse.json({
+      success: true,
+      user: result.user,
     });
-
-    return NextResponse.redirect(new URL('/admin/dashboard', request.url));
   } catch (error) {
     console.error('Login error:', error);
-    return NextResponse.redirect(
-      new URL('/login?error=server', request.url)
+    return NextResponse.json(
+      { success: false, error: 'An error occurred during login' },
+      { status: 500 }
     );
   }
 }
