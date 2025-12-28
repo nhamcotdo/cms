@@ -1,7 +1,7 @@
 extends layout
 
 block content
-    .header
+    .header(data-page='CREATE')
         h1 Create New Post
         p Compose your post and schedule it for later
 
@@ -22,6 +22,17 @@ block content
                     #previewContainer.preview-grid
 
                 #attachmentData
+
+                .form-group
+                    label.form-label(for='accountId') Post to Account
+                    select.form-control#accountId(name='accountId', required)
+                        if currentAccount
+                            option(value=currentAccount.id, selected)= currentAccount.username || 'Current Account'
+                        each account in accounts
+                            if currentAccount && account.id === currentAccount.id
+                                // Skip current account as it's already added
+                            else
+                                option(value=account.id)= account.username || account.threads_id
 
                 .form-group
                     label.form-label(for='scheduleDate') Schedule (optional)

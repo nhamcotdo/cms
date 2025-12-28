@@ -158,9 +158,13 @@ router.get('/dashboard', async (req, res) => {
  * Create Post Route
  */
 router.get('/create', (req, res) => {
+    const { AccountsModel } = require('../database/accountModels');
+    const accounts = AccountsModel.findAll({ is_active: true });
+
     renderWithLocals(req, res, 'admin/create-post', {
         title: 'Create Post',
         currentPage: 'create',
+        accounts,
     });
 });
 
@@ -229,6 +233,7 @@ router.post('/save', loggedInUserChecker, upload.array(), async (req, res) => {
         scheduleDate,
         scheduleTime,
         saveType,
+        accountId,
     } = req.body;
 
     // Handle saveType being an array from FormData
@@ -299,6 +304,7 @@ router.post('/save', loggedInUserChecker, upload.array(), async (req, res) => {
             is_spoiler_media: spoilerMedia === 'on',
             poll_attachment: pollAttachment,
             text_entities: textEntities,
+            account_id: accountId || req.currentAccount?.id || null,
         });
 
         const successMessage = actualSaveType === 'schedule'
@@ -596,10 +602,14 @@ router.get('/scheduled/:id/edit', loggedInUserChecker, async (req, res) => {
             });
         }
 
+        const { AccountsModel } = require('../database/accountModels');
+        const accounts = AccountsModel.findAll({ is_active: true });
+
         res.render('admin/edit-post', {
             title: 'Edit Post',
             currentPage: 'scheduled',
             post,
+            accounts,
         });
     } catch (error) {
         console.error('Error loading post:', error);
@@ -633,6 +643,7 @@ router.put('/scheduled/:id', loggedInUserChecker, upload.array(), async (req, re
             spoilerMedia,
             scheduleDate,
             scheduleTime,
+            accountId,
         } = req.body;
 
         const existingPost = ScheduledPostsModel.findById(req.params.id);
@@ -698,6 +709,7 @@ router.put('/scheduled/:id', loggedInUserChecker, upload.array(), async (req, re
             is_spoiler_media: spoilerMedia === 'on',
             poll_attachment: pollAttachment,
             text_entities: textEntities,
+            account_id: accountId || req.currentAccount?.id || existingPost.account_id,
         };
 
         const post = ScheduledPostsModel.update(req.params.id, updateData);
@@ -722,6 +734,18 @@ router.post('/scheduled/:id/publish', loggedInUserChecker, async (req, res) => {
 
         if (!post) {
             return res.status(404).json({ error: true, message: 'Post not found' });
+        }
+
+        // Load the account associated with this post
+        const { AccountsModel } = require('../database/accountModels');
+        const accountId = post.account_id || req.currentAccount?.id;
+        const postAccount = accountId ? AccountsModel.findById(accountId) : null;
+
+        if (!postAccount || !postAccount.access_token) {
+            return res.status(400).json({
+                error: true,
+                message: 'No valid account found for this post. Please add an account first.',
+            });
         }
 
         const GRAPH_API_BASE_URL =
@@ -791,7 +815,7 @@ router.post('/scheduled/:id/publish', loggedInUserChecker, async (req, res) => {
         const postThreadsUrl = buildGraphAPIURL(
             `me/threads`,
             params,
-            req.currentAccount?.access_token || req.session.access_token
+            postAccount.access_token
         );
 
         console.log('Creating container with URL:', postThreadsUrl);
@@ -816,7 +840,7 @@ router.post('/scheduled/:id/publish', loggedInUserChecker, async (req, res) => {
             const publishUrl = buildGraphAPIURL(
                 `me/threads_publish`,
                 { creation_id: containerId },
-                req.currentAccount?.access_token || req.session.access_token
+                postAccount.access_token
             );
 
             const publishResponse = await axios.post(publishUrl, {}, { httpsAgent: agent });

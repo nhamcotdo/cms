@@ -31,6 +31,17 @@ block content
                     #attachmentData
 
                 .form-group
+                    label.form-label(for='accountId') Post to Account
+                    select.form-control#accountId(name='accountId', required)
+                        if currentAccount
+                            option(value=currentAccount.id, selected=(post.account_id === currentAccount.id))= currentAccount.username || 'Current Account'
+                        each account in accounts
+                            if currentAccount && account.id === currentAccount.id
+                                // Skip current account as it's already added
+                            else
+                                option(value=account.id, selected=(post.account_id === account.id))= account.username || account.threads_id
+
+                .form-group
                     label.form-label(for='scheduleDate') Schedule
                     - const scheduledDate = post.scheduled_for ? new Date(post.scheduled_for * 1000) : new Date()
                     .row

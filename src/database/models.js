@@ -25,8 +25,8 @@ const ScheduledPostsModel = {
             INSERT INTO scheduled_posts (
                 text, media_type, scheduled_for, status, attachment_data,
                 reply_control, reply_to_id, link_attachment, topic_tag,
-                quote_post_id, is_spoiler_media, poll_attachment, text_entities
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                quote_post_id, is_spoiler_media, poll_attachment, text_entities, account_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
 
         const result = stmt.run(
@@ -42,7 +42,8 @@ const ScheduledPostsModel = {
             postData.quote_post_id || null,
             postData.is_spoiler_media ? 1 : 0,
             postData.poll_attachment ? JSON.stringify(postData.poll_attachment) : null,
-            postData.text_entities ? JSON.stringify(postData.text_entities) : null
+            postData.text_entities ? JSON.stringify(postData.text_entities) : null,
+            postData.account_id || null
         );
 
         return this.findById(result.lastInsertRowid);

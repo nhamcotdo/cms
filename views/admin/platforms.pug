@@ -1,7 +1,7 @@
 extends ../admin/layout
 
 block content
-    .header
+    .header(data-page='PLATFORMS')
         h1 Choose Your Platform
         p Select a platform to connect and manage your social media channels
 
@@ -9,7 +9,7 @@ block content
         // Threads Platform Card
         .platform-card.threads-card
             .platform-icon
-                = '🧵'
+                img.threads-logo(src='/img/threads-logo.png' width='64' height='64' alt='Threads Logo')
             .platform-info
                 h2 Threads
                 p.platform-desc Meta's text-based social platform. Share updates, engage with your audience, and grow your community.
@@ -33,7 +33,7 @@ block content
         // Instagram Platform Card (Coming Soon)
         .platform-card.disabled
             .platform-icon
-                = '📷'
+                img.instagram-logo(src='/img/instagram-logo.png' width='64' height='64' alt='Instagram Logo')
             .platform-info
                 h2 Instagram
                 p.platform-desc Coming soon. Connect your Instagram business account to schedule posts, reels, and stories.
@@ -43,7 +43,7 @@ block content
         // Facebook Platform Card (Coming Soon)
         .platform-card.disabled
             .platform-icon
-                = '📘'
+                img.facebook-logo(src='/img/facebook-logo.png' width='64' height='64' alt='Facebook Logo')
             .platform-info
                 h2 Facebook
                 p.platform-desc Coming soon. Manage your Facebook pages and schedule content across multiple platforms.
@@ -62,7 +62,7 @@ block scripts
         .platform-card {
             position: relative;
             background: var(--bg-secondary);
-            border: 1px solid rgba(255, 255, 255, 0.08);
+            border: var(--border-thick) solid var(--border-color);
             border-radius: var(--radius-xl);
             padding: var(--spacing-xl);
             transition: all var(--transition-normal);
@@ -75,7 +75,7 @@ block scripts
             top: 0;
             left: 0;
             right: 0;
-            height: 4px;
+            height: var(--border-thick);
             background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
             opacity: 0;
             transition: opacity var(--transition-normal);
@@ -87,8 +87,8 @@ block scripts
 
         .platform-card:hover:not(.disabled) {
             transform: translateY(-4px);
-            border-color: rgba(204, 255, 0, 0.2);
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3), 0 0 40px var(--accent-glow);
+            border-color: var(--accent-lime);
+            box-shadow: 4px 4px 0 var(--accent-lime);
         }
 
         .platform-card.disabled {
@@ -97,9 +97,15 @@ block scripts
         }
 
         .platform-icon {
-            font-size: 48px;
             margin-bottom: var(--spacing-md);
             display: inline-block;
+        }
+
+        .platform-icon img {
+            width: 64px;
+            height: 64px;
+            object-fit: contain;
+            filter: drop-shadow(0 0 10px rgba(204, 255, 0, 0.3));
         }
 
         .platform-info {
@@ -107,11 +113,12 @@ block scripts
         }
 
         .platform-info h2 {
-            font-family: 'Syne', sans-serif;
-            font-size: 28px;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 32px;
             font-weight: 700;
             margin-bottom: var(--spacing-sm);
             color: var(--text-primary);
+            letter-spacing: 2px;
         }
 
         .platform-desc {
@@ -127,8 +134,8 @@ block scripts
             gap: var(--spacing-md);
             margin-bottom: var(--spacing-lg);
             padding: var(--spacing-md) 0;
-            border-top: 1px solid rgba(255, 255, 255, 0.06);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            border-top: var(--border-thick) solid var(--border-color);
+            border-bottom: var(--border-thick) solid var(--border-color);
         }
 
         .platform-stat {
@@ -141,13 +148,14 @@ block scripts
             text-transform: uppercase;
             letter-spacing: 0.5px;
             color: var(--text-tertiary);
+            font-family: 'JetBrains Mono', monospace;
         }
 
         .platform-stat .stat-value {
-            font-family: 'Syne', sans-serif;
-            font-size: 24px;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 32px;
             font-weight: 700;
-            color: var(--text-primary);
+            color: var(--accent-lime);
             margin-top: 4px;
         }
 
@@ -160,11 +168,12 @@ block scripts
             display: inline-block;
             padding: 6px 12px;
             background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            border: var(--border-thick) solid var(--border-color);
             border-radius: var(--radius-md);
             font-size: 12px;
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.5px;
             color: var(--text-tertiary);
+            font-family: 'JetBrains Mono', monospace;
         }
